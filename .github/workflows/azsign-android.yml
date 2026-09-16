@@ -211,6 +211,41 @@ jobs:
               '  }\n',
               'publicador de ID',
           )
+
+          # --- 3b. Publicar o ID sem depender da aba -----------------------
+          # `fetchID()` só é chamado dentro da aba "Compartilhar Tela"
+          # (server_page.dart:189). Pendurar a publicação só nele exigiria o
+          # toque na TV que este build existe para eliminar — medido num DC400
+          # em 16/09/2026: o arquivo só apareceu depois de navegar até a aba.
+          # O timer no construtor cobre a abertura normal do app.
+          patch(
+              MODEL,
+              "    // Initial keyboard status is off on mobile\n"
+              "    if (isMobile) {\n"
+              "      bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');\n"
+              "    }\n"
+              '  }\n',
+              "    // Initial keyboard status is off on mobile\n"
+              "    if (isMobile) {\n"
+              "      bind.mainSetOption(key: kOptionEnableKeyboard, value: 'N');\n"
+              "    }\n"
+              '\n'
+              '    // AZSign: publica o ID assim que ele existir. Desiste depois de\n'
+              '    // ~60s para não deixar um timer vivo à toa num player ligado 24h.\n'
+              '    if (isAndroid && !isTest) {\n'
+              '      Timer.periodic(const Duration(seconds: 2), (timer) async {\n'
+              '        final id = await bind.mainGetMyId();\n'
+              '        if (id.isNotEmpty) {\n'
+              '          timer.cancel();\n'
+              '          azsignPublishId(id);\n'
+              '        } else if (timer.tick >= 30) {\n'
+              '          timer.cancel();\n'
+              '        }\n'
+              '      });\n'
+              '    }\n'
+              '  }\n',
+              'publicador de ID na abertura',
+          )
           PYEOF
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
