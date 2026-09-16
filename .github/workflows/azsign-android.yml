@@ -49,20 +49,21 @@ jobs:
           android: false
           tool-cache: true
 
+      # Lista idêntica à do job Android do projeto. Os *-multilib e o libc6-dev
+      # não são opcionais: sem eles o build script do hwcodec falha com
+      # "bits/libc-header-start.h file not found" ao rodar bindgen.
       - name: Dependências do sistema
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
-            clang cmake curl gcc git g++ libclang-dev llvm-dev \
-            nasm ninja-build openjdk-17-jdk-headless pkg-config tree wget \
-            libgtk-3-dev libxcb-randr0-dev libxdo-dev libxfixes-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libpulse-dev libasound2-dev
+            clang cmake curl g++ g++-multilib gcc-multilib git \
+            libasound2-dev libayatana-appindicator3-dev libc6-dev libclang-dev \
+            libgstreamer-plugins-base1.0-dev libgstreamer1.0-dev libgtk-3-dev \
+            libpam0g-dev libpulse-dev libunwind-dev libva-dev \
+            libxcb-randr0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxdo-dev libxfixes-dev llvm-dev nasm ninja-build \
+            openjdk-17-jdk-headless pkg-config tree wget
 
-      # A tag, não o master: a matriz de versões abaixo foi extraída do
-      # workflow da 1.4.9. Compilar o master com o vcpkg da 1.4.9 falha com
-      # "no version database entry for vcpkg-cmake-config" — o vcpkg.json do
-      # master exige uma baseline mais nova.
       - name: Checkout da tag ${{ env.RUSTDESK_TAG }} (com submódulos)
         uses: actions/checkout@v4
         with:
