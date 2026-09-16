@@ -246,6 +246,93 @@ jobs:
               '  }\n',
               'publicador de ID na abertura',
           )
+          # --- 4. Sincronizar controle também no boot sem Flutter ---------
+          # InputService pode conectar antes do MainService; só escrevemos
+          # opções depois que startServer definiu o diretório da configuração.
+          patch(
+              'flutter/android/app/src/main/kotlin/ffi.kt',
+              '    external fun startService()\n',
+              '    external fun startService()\n'
+              '    external fun setInputServiceEnabled(enabled: Boolean)\n',
+              'ponte nativa do estado de controle',
+          )
+          patch(
+              'src/flutter_ffi.rs',
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_startService(',
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_setInputServiceEnabled(\n'
+              '        _env: JNIEnv,\n'
+              '        _class: JClass,\n'
+              '        enabled: jboolean,\n'
+              '    ) {\n'
+              '        let value = if enabled != 0 { "" } else { "N" };\n'
+              '        log::info!("AZSign: input service enabled={}", enabled != 0);\n'
+              '        super::main_set_option(\n'
+              '            config::keys::OPTION_ENABLE_KEYBOARD.to_owned(),\n'
+              '            value.to_owned(),\n'
+              '        );\n'
+              '    }\n\n'
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_startService(',
+              'atualizar configuração e permissões das sessões',
+          )
+          INPUT = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt'
+          patch(
+              INPUT,
+              '        var ctx: InputService? = null\n',
+              '        var ctx: InputService? = null\n'
+              '        private var azsignServerReady = false\n\n'
+              '        fun azsignServerStarted() {\n'
+              '            azsignServerReady = true\n'
+              '            azsignSyncInputState()\n'
+              '        }\n\n'
+              '        fun azsignServerStopped() {\n'
+              '            azsignServerReady = false\n'
+              '        }\n\n'
+              '        private fun azsignSyncInputState() {\n'
+              '            if (azsignServerReady) {\n'
+              '                ffi.FFI.setInputServiceEnabled(isOpen)\n'
+              '            }\n'
+              '        }\n',
+              'sincronização nativa após inicialização da configuração',
+          )
+          patch(
+              INPUT,
+              '    private fun notifyInputState() {\n',
+              '    private fun notifyInputState() {\n'
+              '        azsignSyncInputState()\n',
+              'publicar conexão e desconexão da acessibilidade',
+          )
+          SERVICE = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt'
+          patch(
+              SERVICE,
+              '        FFI.startServer(configPath, "")\n',
+              '        FFI.startServer(configPath, "")\n'
+              '        InputService.azsignServerStarted()\n',
+              'restaurar estado no boot sem Activity',
+          )
+          patch(
+              SERVICE,
+              '    override fun onDestroy() {\n',
+              '    override fun onDestroy() {\n'
+              '        InputService.azsignServerStopped()\n',
+              'encerrar sincronização junto com o servidor',
+          )
+          patch(
+              MODEL,
+              '    // Initial keyboard status is off on mobile\n'
+              '    if (isMobile) {\n',
+              '    // AZSign: Android input permission follows the native service lifecycle.\n'
+              '    if (isIOS) {\n',
+              'não sobrescrever estado Android ao abrir Flutter',
+          )
+          patch(
+              MODEL,
+              "      case \"input\":\n        if (_inputOk != value) {\n",
+              "      case \"input\":\n        if (!isAndroid && _inputOk != value) {\n",
+              'Android nativo é a fonte da permissão de controle',
+          )
           PYEOF
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
