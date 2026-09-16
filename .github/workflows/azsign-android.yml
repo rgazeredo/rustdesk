@@ -21,6 +21,8 @@ on:
         default: "azsign"
 
 env:
+  # Fonte e versões precisam vir do MESMO ponto da história do projeto.
+  RUSTDESK_TAG: "1.4.9"
   RUST_VERSION: "1.75"
   ANDROID_FLUTTER_VERSION: "3.24.5"
   NDK_VERSION: "r28c"
@@ -53,9 +55,14 @@ jobs:
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libpulse-dev libasound2-dev
 
-      - name: Checkout (com submódulos)
+      # A tag, não o master: a matriz de versões abaixo foi extraída do
+      # workflow da 1.4.9. Compilar o master com o vcpkg da 1.4.9 falha com
+      # "no version database entry for vcpkg-cmake-config" — o vcpkg.json do
+      # master exige uma baseline mais nova.
+      - name: Checkout da tag ${{ env.RUSTDESK_TAG }} (com submódulos)
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.RUSTDESK_TAG }}
           submodules: recursive
 
       # ------------------------------------------------------------------
