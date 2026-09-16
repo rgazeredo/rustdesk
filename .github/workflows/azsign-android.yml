@@ -99,6 +99,120 @@ jobs:
           grep -n "RENDEZVOUS_SERVERS\|RS_PUB_KEY" "$CFG" | sed 's/'"$PUBKEY"'/<chave oculta>/'
           grep -n "KEY_START_ON_BOOT_OPT" "$BOOT" "$MAIN"
 
+      # ------------------------------------------------------------------
+      # Provisionamento sem ninguém na frente da TV.
+      #
+      # Cada substituição abaixo ABORTA o build se o texto original não for
+      # encontrado. Isso é deliberado: um `sed` que não casa passa silencioso e
+      # gera um APK sem a customização, que só se descobre no aparelho. Se a
+      # 1.4.9 mudar, o build quebra aqui, onde dá para ler o motivo.
+      # ------------------------------------------------------------------
+      - name: Patches de provisionamento AZSign
+        run: |
+          python3 - <<'PYEOF'
+          import sys
+
+          def patch(path, old, new, nome):
+              src = open(path, encoding='utf-8').read()
+              if new in src:
+                  print(f'  = {nome}: já aplicado')
+                  return
+              if src.count(old) != 1:
+                  sys.exit(f'::error::{nome}: esperava 1 ocorrência em {path}, '
+                           f'achei {src.count(old)}. A 1.4.9 mudou?')
+              open(path, 'w', encoding='utf-8').write(src.replace(old, new))
+              print(f'  + {nome}: aplicado em {path}')
+
+          # --- 1. Liberar os deep links de provisionamento -----------------
+          # `rustdesk://password/<senha>` é o caminho OFICIAL do RustDesk para
+          # definir a senha permanente, mas vem trancado atrás de uma opção que
+          # só o cliente pago do RustDesk consegue destravar (o custom.txt é
+          # assinado com a chave privada deles). Como compilamos o nosso, a
+          # liberação vira uma condição na própria leitura da opção.
+          patch(
+              'src/common.rs',
+              'pub fn get_builtin_option(key: &str) -> String {\n',
+              'pub fn get_builtin_option(key: &str) -> String {\n'
+              '    // AZSign: o Box Manager provisiona a senha por deep link, via ADB.\n'
+              '    if key == "allow-deep-link-password"\n'
+              '        || key == "allow-deep-link-server-settings"\n'
+              '    {\n'
+              '        return "Y".to_owned();\n'
+              '    }\n',
+              'deep links liberados',
+          )
+
+          # --- 2. Remover o aviso anti-golpe ------------------------------
+          # O diálogo trava o start do serviço atrás de um clique humano com
+          # contagem regressiva. Num player instalado em ponto de cliente não
+          # há humano para clicar.
+          patch(
+              'flutter/lib/mobile/pages/server_page.dart',
+              '                onPressed: () {\n'
+              '                  if (gFFI.userModel.userName.value.isEmpty &&\n'
+              '                      bind.mainGetLocalOption(key: "show-scam-warning") !=\n'
+              '                          "N") {\n'
+              '                    showScamWarning(context, serverModel);\n'
+              '                  } else {\n'
+              '                    serverModel.toggleService();\n'
+              '                  }\n'
+              '                },\n',
+              '                onPressed: () {\n'
+              '                  // AZSign: sem aviso anti-golpe — não há ninguém na TV.\n'
+              '                  serverModel.toggleService();\n'
+              '                },\n',
+              'aviso anti-golpe removido',
+          )
+
+          # --- 3. Publicar o ID onde o ADB alcança ------------------------
+          # O ID mora em RustDesk.toml como `enc_id`, dentro de /data/data, que
+          # o ADB não lê sem root. getExternalStorageDirectory() cai em
+          # /sdcard/Android/data/<pkg>/files, que o ADB lê.
+          #
+          # Não confunda com `info1-id` do logcat: aquele é o mesmo valor em
+          # aparelhos diferentes, não é o ID do RustDesk.
+          MODEL = 'flutter/lib/models/server_model.dart'
+          patch(
+              MODEL,
+              "import 'dart:async';\nimport 'dart:convert';\n",
+              "import 'dart:async';\nimport 'dart:convert';\nimport 'dart:io';\n\n"
+              "import 'package:path_provider/path_provider.dart';\n",
+              'imports do publicador de ID',
+          )
+          patch(
+              MODEL,
+              '  fetchID() async {\n'
+              '    final id = await bind.mainGetMyId();\n'
+              '    if (id != _serverId.id) {\n'
+              '      _serverId.id = id;\n'
+              '      notifyListeners();\n'
+              '    }\n'
+              '  }\n',
+              '  fetchID() async {\n'
+              '    final id = await bind.mainGetMyId();\n'
+              '    if (id != _serverId.id) {\n'
+              '      _serverId.id = id;\n'
+              '      notifyListeners();\n'
+              '      azsignPublishId(id);\n'
+              '    }\n'
+              '  }\n'
+              '\n'
+              '  /// AZSign: grava o ID num arquivo legível por ADB sem root, para o\n'
+              '  /// Box Manager mostrar o endereço do aparelho sem olhar a TV.\n'
+              '  Future<void> azsignPublishId(String id) async {\n'
+              '    if (!isAndroid || id.isEmpty) return;\n'
+              '    try {\n'
+              '      final dir = await getExternalStorageDirectory();\n'
+              '      if (dir == null) return;\n'
+              "      await File('${dir.path}/azsign-rustdesk-id.txt').writeAsString(id);\n"
+              '    } catch (e) {\n'
+              "      debugPrint('AZSign: falha ao publicar o ID: $e');\n"
+              '    }\n'
+              '  }\n',
+              'publicador de ID',
+          )
+          PYEOF
+
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
         with:
