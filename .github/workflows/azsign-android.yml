@@ -333,6 +333,27 @@ jobs:
               "      case \"input\":\n        if (!isAndroid && _inputOk != value) {\n",
               'Android nativo é a fonte da permissão de controle',
           )
+          # --- 5. Desativar áudio no player AZSign ------------------------
+          # Alguns firmwares Amlogic Android 11 abortam nativamente em
+          # AudioRecord.getMinFrameCount() quando o RustDesk tenta iniciar
+          # playback capture. Isso derruba a sessão logo após a senha e faz
+          # o cliente mostrar "connection reset by peer". O player precisa
+          # de vídeo e entrada, não de áudio remoto.
+          patch(
+              SERVICE,
+              '        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n'
+              '            val audioStarted = if (inVoiceCall) {\n'
+              '                switchToVoiceCall()\n'
+              '            } else {\n'
+              '                audioRecordHandle.createAudioRecorder(false, mediaProjection) &&\n'
+              '                        audioRecordHandle.startAudioRecorder()\n'
+              '            }\n'
+              '            Log.d(logTag, if (audioStarted) "audio recorder start" else "audio recorder start failed")\n'
+              '        }\n',
+              '        // AZSign: áudio remoto desativado para compatibilidade com TV Box.\n'
+              '        Log.d(logTag, "AZSign: audio capture disabled for TV box compatibility")\n',
+              'captura de áudio desativada nos TV Box',
+          )
           PYEOF
 
       - name: Checkout do protótipo de entrada root
