@@ -597,15 +597,14 @@ class MainService : Service() {
             return false
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val audioStarted = if (inVoiceCall) {
-                switchToVoiceCall()
-            } else {
-                audioRecordHandle.createAudioRecorder(false, mediaProjection) &&
-                        audioRecordHandle.startAudioRecorder()
-            }
-            Log.d(logTag, if (audioStarted) "audio recorder start" else "audio recorder start failed")
-        }
+        // AZSign boxes are provisioned for screen/control only. Several
+        // Amlogic Android 11 firmwares abort inside AudioRecord's native
+        // getMinFrameCount() when RustDesk requests playback capture. That
+        // native SIGABRT tears down the whole service immediately after a
+        // remote peer connects, leaving the client with "connection reset by
+        // peer" / "offline". Do not initialize audio for the unattended
+        // player build; video and input remain enabled.
+        Log.d(logTag, "AZSign: audio capture disabled for TV box compatibility")
         captureRestartInVoiceCall = false
         checkMediaPermission()
         _isStart = true
