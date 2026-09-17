@@ -304,9 +304,11 @@ class InputService : AccessibilityService() {
     private fun doDispatchGesture(x: Int, y: Int, willContinue: Boolean) {
         touchPath.lineTo(x.toFloat(), y.toFloat())
         var duration = System.currentTimeMillis() - lastTouchGestureStartTime
-        if (duration <= 0) {
-            duration = 1
-        }
+        // Alguns firmwares Android 11/Amlogic descartam strokes de 1 ms
+        // enviados por dispatchGesture. O RustDesk costuma gerar down/up
+        // consecutivos nesse intervalo; manter um mínimo pequeno torna o
+        // clique observável sem deixar o arrasto lento.
+        duration = duration.coerceAtLeast(40L)
         try {
             if (stroke == null) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
