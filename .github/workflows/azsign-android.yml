@@ -354,10 +354,9 @@ jobs:
               'captura de áudio desativada nos TV Box',
           )
           # --- 6. Duração mínima dos toques -------------------------------
-          # Alguns firmwares Amlogic descartam strokes de 1 ms: o evento chega
-          # ao AccessibilityService, mas nunca vira toque no display. O peer
-          # envia DOWN/UP em chamadas consecutivas, portanto um limite de
-          # 40 ms é necessário para taps reais.
+          # Hipótese de compatibilidade em teste. O mínimo de 40 ms sozinho
+          # não resolveu os cliques no Aquário; os callbacks abaixo permitem
+          # investigar a execução real dos gestos no framework.
           patch(
               INPUT,
               '        if (duration <= 0) {\n'
@@ -365,6 +364,31 @@ jobs:
               '        }\n',
               '        duration = duration.coerceAtLeast(40L)\n',
               'duração mínima dos gestos de toque',
+          )
+          patch(
+              INPUT,
+              '    private val logTag = "input service"\n',
+              '    private val logTag = "input service"\n'
+              '    private val azsignGestureSequence = java.util.concurrent.atomic.AtomicLong(0)\n',
+              'sequência de diagnóstico de gestos',
+          )
+          patch(
+              INPUT,
+              '                Log.d(logTag, "doDispatchGesture x:$x y:$y time:$duration")\n'
+              '                dispatchGesture(builder.build(), null, null)\n',
+              '                val diagnosticId = azsignGestureSequence.incrementAndGet()\n'
+              '                val submittedAt = android.os.SystemClock.uptimeMillis()\n'
+              '                Log.i("AZSignGesture", "submit id=$diagnosticId duration=$duration continue=$willContinue")\n'
+              '                val accepted = dispatchGesture(builder.build(), object : android.accessibilityservice.AccessibilityService.GestureResultCallback() {\n'
+              '                    override fun onCompleted(gestureDescription: GestureDescription) {\n'
+              '                        Log.i("AZSignGesture", "completed id=$diagnosticId elapsed=${android.os.SystemClock.uptimeMillis() - submittedAt}")\n'
+              '                    }\n'
+              '                    override fun onCancelled(gestureDescription: GestureDescription) {\n'
+              '                        Log.w("AZSignGesture", "cancelled id=$diagnosticId elapsed=${android.os.SystemClock.uptimeMillis() - submittedAt}")\n'
+              '                    }\n'
+              '                }, android.os.Handler(android.os.Looper.getMainLooper()))\n'
+              '                Log.i("AZSignGesture", "accepted id=$diagnosticId value=$accepted")\n',
+              'retorno e callbacks dos gestos de toque',
           )
           PYEOF
 
