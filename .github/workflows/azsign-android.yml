@@ -353,6 +353,19 @@ jobs:
               '        Log.d(logTag, "AZSign: audio capture disabled for TV box compatibility")\n',
               'captura de áudio desativada nos TV Box',
           )
+          # --- 6. Duração mínima dos toques -------------------------------
+          # Alguns firmwares Amlogic descartam strokes de 1 ms: o evento chega
+          # ao AccessibilityService, mas nunca vira toque no display. O peer
+          # envia DOWN/UP em chamadas consecutivas, portanto um limite de
+          # 40 ms é necessário para taps reais.
+          patch(
+              INPUT,
+              '        if (duration <= 0) {\n'
+              '            duration = 1\n'
+              '        }\n',
+              '        duration = duration.coerceAtLeast(40L)\n',
+              'duração mínima dos gestos de toque',
+          )
           PYEOF
 
       - name: Checkout do protótipo de entrada root
