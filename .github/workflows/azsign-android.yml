@@ -342,13 +342,12 @@ jobs:
           patch(
               SERVICE,
               '        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n'
-              '            val audioStarted = if (inVoiceCall) {\n'
-              '                switchToVoiceCall()\n'
+              '            if (!audioRecordHandle.createAudioRecorder(false, mediaProjection)) {\n'
+              '                Log.d(logTag, "createAudioRecorder fail")\n'
               '            } else {\n'
-              '                audioRecordHandle.createAudioRecorder(false, mediaProjection) &&\n'
-              '                        audioRecordHandle.startAudioRecorder()\n'
+              '                Log.d(logTag, "audio recorder start")\n'
+              '                audioRecordHandle.startAudioRecorder()\n'
               '            }\n'
-              '            Log.d(logTag, if (audioStarted) "audio recorder start" else "audio recorder start failed")\n'
               '        }\n',
               '        // AZSign: áudio remoto desativado para compatibilidade com TV Box.\n'
               '        Log.d(logTag, "AZSign: audio capture disabled for TV box compatibility")\n',
