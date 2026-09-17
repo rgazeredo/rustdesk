@@ -487,7 +487,7 @@ jobs:
           test -n "$KEY_PASSWORD" || { echo "::error::secret AZSIGN_ANDROID_KEY_PASSWORD não definido"; exit 1; }
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
-          echo "$KEYSTORE_BASE64" | base64 --decode > ./flutter/android/azsign-release.jks
+          echo "$KEYSTORE_BASE64" | base64 --decode > ./flutter/android/app/azsign-release.jks
           cat > ./flutter/android/key.properties <<EOF
           storeFile=azsign-release.jks
           storePassword=$KEYSTORE_PASSWORD
