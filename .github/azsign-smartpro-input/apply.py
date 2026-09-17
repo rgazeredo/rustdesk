@@ -19,8 +19,6 @@ patch(base / 'MainService.kt', '        InputService.azsignServerStarted()',
       '        InputService.azsignServerStarted()\n        SmartProAccessibility.start(applicationContext)')
 patch(base / 'MainService.kt', '        InputService.azsignServerStopped()',
       '        SmartProAccessibility.stop()\n        InputService.azsignServerStopped()')
-patch(base / 'MainService.kt', '    override fun onDestroy() {',
-      '    override fun onDestroy() {\n        SmartProAccessibility.stop()')
 patch(base / 'MainActivity.kt', '                "stop_input" -> {',
       '                "stop_input" -> {\n                    SmartProAccessibility.setManuallyDisabled(context, true)')
 patch(base / 'MainActivity.kt', '                        startAction(context, call.arguments as String)',
