@@ -27,12 +27,7 @@ patch(base / 'InputService.kt',
       '    override fun onUnbind(intent: Intent?): Boolean {',
       '    override fun onUnbind(intent: Intent?): Boolean {\n        aquarioNodeClick.close()')
 
-# Install alongside the existing APK; the pilot must not erase production app data.
-patch(Path('flutter/android/app/build.gradle'),
-      'applicationId "com.carriez.flutter_hbb"',
-      'applicationId "com.carriez.flutter_hbb.aquariopilot"')
-patch(Path('flutter/android/app/src/main/AndroidManifest.xml'),
-      'android:label="RustDesk"', 'android:label="RustDesk Aquário Piloto"')
-patch(Path('flutter/android/app/src/main/AndroidManifest.xml'),
-      'android:label="RustDesk Input"', 'android:label="RustDesk Aquário Input"')
-print('AZSign Aquario native node-click pilot applied')
+# This is a runtime-gated extension of the normal AZSign package.  Keeping the
+# production applicationId preserves its settings, ID and permissions across an
+# upgrade.  The helper is inert outside the affected Aquario firmware.
+print('AZSign Aquario native node-click support applied')

@@ -9,8 +9,12 @@ name: AZSign — APK Android customizado
 # ilimitado) sem expor o endereço do servidor.
 #
 # Secrets necessários em Settings → Secrets and variables → Actions:
-#   RUSTDESK_HOST     ex.: 74.208.72.16
-#   RUSTDESK_PUB_KEY  a chave pública do hbbs (id_ed25519.pub)
+#   RUSTDESK_HOST                   ex.: 74.208.72.16
+#   RUSTDESK_PUB_KEY                a chave pública do hbbs (id_ed25519.pub)
+#   AZSIGN_ANDROID_KEYSTORE_BASE64  keystore de distribuição codificado em base64
+#   AZSIGN_ANDROID_KEY_ALIAS        alias da chave
+#   AZSIGN_ANDROID_KEYSTORE_PASSWORD
+#   AZSIGN_ANDROID_KEY_PASSWORD
 
 on:
   workflow_dispatch:
@@ -471,14 +475,29 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          KEYSTORE_BASE64: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.AZSIGN_ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.AZSIGN_ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::secret AZSIGN_ANDROID_KEYSTORE_BASE64 não definido"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::secret AZSIGN_ANDROID_KEY_ALIAS não definido"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::secret AZSIGN_ANDROID_KEYSTORE_PASSWORD não definido"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::secret AZSIGN_ANDROID_KEY_PASSWORD não definido"; exit 1; }
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
-          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          echo "$KEYSTORE_BASE64" | base64 --decode > ./flutter/android/azsign-release.jks
+          cat > ./flutter/android/key.properties <<EOF
+          storeFile=azsign-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-aquario-node-v10 --build-number=1070
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v11 --build-number=2071
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
