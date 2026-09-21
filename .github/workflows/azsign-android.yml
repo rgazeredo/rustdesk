@@ -4,13 +4,11 @@ name: AZSign — APK Android customizado
 # da AZSign. Somente armeabi-v7a: é a ABI dos TV Box homologados, e compilar só
 # uma arquitetura corta o tempo de build para um quarto.
 #
-# Servidor e chave NÃO ficam no repositório — vêm de secrets e são injetados
-# no config.rs antes de compilar. Assim o fork pode ser público (Actions grátis
-# ilimitado) sem expor o endereço do servidor.
+# Endereços e chave pública ficam explícitos neste build de migração.
+# Somente a assinatura de distribuição usa secrets; nenhuma chave privada
+# do servidor deve ser incluída no APK ou neste repositório.
 #
 # Secrets necessários em Settings → Secrets and variables → Actions:
-#   RUSTDESK_HOST                   ex.: 74.208.72.16
-#   RUSTDESK_PUB_KEY                a chave pública do hbbs (id_ed25519.pub)
 #   AZSIGN_ANDROID_KEYSTORE_BASE64  keystore de distribuição codificado em base64
 #   AZSIGN_ANDROID_KEY_ALIAS        alias da chave
 #   AZSIGN_ANDROID_KEYSTORE_PASSWORD
@@ -79,19 +77,57 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: ${{ secrets.RUSTDESK_HOST }}
-          PUBKEY: ${{ secrets.RUSTDESK_PUB_KEY }}
+          HOST: rustdesk.azsign.com.br
+          RELAY: rustdesk.azsign.com.br:21117
+          PUBKEY: vqn40KhffTpN889pMZr5MAuOjactjjlTw9iQgCXmqu8=
         run: |
           set -euo pipefail
-          test -n "$HOST"   || { echo "::error::secret RUSTDESK_HOST não definido"; exit 1; }
-          test -n "$PUBKEY" || { echo "::error::secret RUSTDESK_PUB_KEY não definido"; exit 1; }
+          test -n "$HOST"
+          test -n "$RELAY"
+          test -n "$PUBKEY"
 
           CFG=libs/hbb_common/src/config.rs
           test -f "$CFG" || { echo "::error::$CFG não existe — submódulo não veio"; exit 1; }
 
-          # 1 e 2: servidor e chave pública
-          sed -i "s|pub const RENDEZVOUS_SERVERS: &\[&str\] = &\[\"[^\"]*\"\];|pub const RENDEZVOUS_SERVERS: \&[\&str] = \&[\"$HOST\"];|" "$CFG"
-          sed -i "s|pub const RS_PUB_KEY: &str = \"[^\"]*\";|pub const RS_PUB_KEY: \&str = \"$PUBKEY\";|" "$CFG"
+          python3 - <<'PYEOF'
+          import base64
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          host, relay, key = (os.environ[name] for name in ('HOST', 'RELAY', 'PUBKEY'))
+          assert len(base64.b64decode(key, validate=True)) == 32, 'Chave pública inválida'
+          assert re.fullmatch(r'[a-z0-9.-]+', host), 'Host inválido'
+          assert relay == host + ':21117', 'Relay inesperado'
+          path = Path('libs/hbb_common/src/config.rs')
+          src = path.read_text()
+          replacements = [
+              (r'pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["[^"]*"\];',
+               'pub const RENDEZVOUS_SERVERS: &[&str] = &[' + json.dumps(host) + '];'),
+              (r'pub const RS_PUB_KEY: &str = "[^"]*";',
+               'pub const RS_PUB_KEY: &str = ' + json.dumps(key) + ';'),
+          ]
+          for pattern, value in replacements:
+              src, count = re.subn(pattern, lambda _: value, src)
+              assert count == 1, f'Alvo de configuração inesperado: {pattern}: {count}'
+
+          # A configuração gerenciada também cobre upgrades com servidor antigo
+          # salvo e a inicialização nativa no boot, antes de abrir o Flutter.
+          old = 'pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = Default::default();'
+          assert src.count(old) == 1, 'Alvo OVERWRITE_SETTINGS inesperado'
+          entries = ',\n'.join(
+              f'            ({json.dumps(name)}.to_owned(), {json.dumps(value)}.to_owned())'
+              for name, value in [('custom-rendezvous-server', host), ('relay-server', relay), ('key', key)]
+          )
+          new = ('pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = {\n'
+                 '        #[cfg(target_os = "android")]\n'
+                 '        { RwLock::new(HashMap::from([\n' + entries + '\n        ])) }\n'
+                 '        #[cfg(not(target_os = "android"))]\n'
+                 '        { Default::default() }\n'
+                 '    };')
+          path.write_text(src.replace(old, new))
+          PYEOF
 
           # 3: iniciar na inicialização — default do SharedPreferences.
           #    Não é alcançável por OVERWRITE_SETTINGS: vive fora do config do Rust.
@@ -501,7 +537,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v12 --build-number=2072
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v13 --build-number=2073
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
