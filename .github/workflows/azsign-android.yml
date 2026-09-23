@@ -441,6 +441,7 @@ jobs:
             .github/azsign-root-input
             .github/azsign-aquario-input
             .github/azsign-smartpro-input
+            .github/azsign-password-confirmation
 
       - name: Aplicar protótipo MCD-125 (opt-in)
         run: python3 pilot-support/.github/azsign-root-input/apply.py
@@ -450,6 +451,9 @@ jobs:
 
       - name: Aplicar recuperação de acessibilidade SmartPro
         run: python3 pilot-support/.github/azsign-smartpro-input/apply.py
+
+      - name: Aplicar confirmação de senha AZSign (somente ADB)
+        run: node pilot-support/.github/azsign-password-confirmation/apply.mjs .
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
@@ -537,7 +541,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v13 --build-number=2073
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v14 --build-number=3074
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
