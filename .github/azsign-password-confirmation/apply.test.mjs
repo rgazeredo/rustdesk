@@ -25,6 +25,8 @@ test('patches the pinned RustDesk source without changing hardware hooks', { ski
   assert.match(rust, /local_permanent_password_storage_matches_plain\(&persisted.password/)
   const dart = readFileSync(join(root, 'flutter/lib/common.dart'), 'utf8')
   assert.match(dart, /'persisted': ok/)
+  assert.ok(dart.includes("RegExp(r'^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$').hasMatch(requestId)"))
+  assert.equal(dart.split("showToast(translate(ok ? 'Successful' : 'Failed'));").length, 2)
   assert.doesNotMatch(dart, /print\("initialLink:/)
   // Applying twice must fail loudly, not duplicate hooks/provider declarations.
   assert.throws(() => execFileSync(process.execPath, [script, root], { stdio: 'pipe' }))

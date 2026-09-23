@@ -9,7 +9,7 @@ function patch(file, old, replacement) {
   const path = resolve(root, file)
   const source = readFileSync(path, 'utf8')
   if (source.split(old).length !== 2) throw new Error(`Expected one anchor: ${file}`)
-  writeFileSync(path, source.replace(old, replacement))
+  writeFileSync(path, source.replace(old, () => replacement))
 }
 const android = 'flutter/android/app/src/main'
 copyFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'AzsignProvisioningProvider.java'),
