@@ -136,7 +136,7 @@ jobs:
           sed -i 's|getBoolean(KEY_START_ON_BOOT_OPT, false)|getBoolean(KEY_START_ON_BOOT_OPT, true)|g' "$BOOT" "$MAIN"
 
           echo "--- conferindo o que ficou gravado:"
-          grep -n "RENDEZVOUS_SERVERS\|RS_PUB_KEY" "$CFG" | sed 's/'"$PUBKEY"'/<chave oculta>/'
+          grep -n "RENDEZVOUS_SERVERS\|RS_PUB_KEY" "$CFG" | sed 's|RS_PUB_KEY.*|RS_PUB_KEY: <chave oculta>|'
           grep -n "KEY_START_ON_BOOT_OPT" "$BOOT" "$MAIN"
 
       # ------------------------------------------------------------------
