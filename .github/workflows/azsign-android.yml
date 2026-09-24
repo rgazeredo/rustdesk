@@ -77,9 +77,9 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: azsign-poc.invalid
-          RELAY: azsign-poc.invalid:21117
-          PUBKEY: QO71FdlktXVSEa5EElPdYUqWpeTeFiYNJlszH8fiCy0=
+          HOST: 127.0.0.1
+          RELAY: 127.0.0.1:21117
+          PUBKEY: syz0DP1/OFnaP8CenzOKiAvMfk1nolNEeFf8vfk2WT8=
         run: |
           set -euo pipefail
           test -n "$HOST"
@@ -549,7 +549,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v16 --build-number=3076
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v17 --build-number=3077
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 

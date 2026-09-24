@@ -44,15 +44,16 @@ pub async fn connect(service: &str, milliseconds: u64) -> ResultType<FramedStrea
 
 pub async fn tcp(target: &str, milliseconds: u64) -> ResultType<crate::Stream> {
     let service = match target {
-        "azsign-poc.invalid:21116" => "rendezvous",
-        "azsign-poc.invalid:21117" => "relay",
+        "127.0.0.1:21116" => "rendezvous",
+        // The private lab server still advertises its logical relay alias.
+        "127.0.0.1:21117" | "azsign-poc.invalid:21117" => "relay",
         _ => bail!("PoC forbids direct/public TCP targets"),
     };
     Ok(crate::Stream::Tcp(connect(service, milliseconds).await?))
 }
 
 pub async fn udp(target: &str, milliseconds: u64) -> ResultType<(crate::udp::FramedSocket, crate::TargetAddr<'static>)> {
-    if target != "azsign-poc.invalid:21116" { bail!("PoC forbids direct/public UDP targets"); }
+    if target != "127.0.0.1:21116" { bail!("PoC forbids direct/public UDP targets"); }
     use crate::IntoTargetAddr;
     let addr = "127.0.0.1:21116".into_target_addr()?.to_owned();
     let stream = connect("registration", milliseconds).await?;
