@@ -32,7 +32,7 @@ pub async fn connect(service: &str, milliseconds: u64) -> ResultType<FramedStrea
         Ok((profile, config))
     }).await??;
     let port = match service { "registration" => profile.registration, "rendezvous" => profile.rendezvous, "relay" => profile.relay, _ => bail!("PoC service denied") };
-    let name = ServerName::try_from(profile.server_name)?;
+    let name = ServerName::try_from(profile.server_name.clone())?;
     crate::timeout(milliseconds, async {
         let socket = TcpStream::connect((profile.host.as_str(), port)).await?;
         socket.set_nodelay(true)?;
