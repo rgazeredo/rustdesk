@@ -7,7 +7,7 @@ const source = resolve(process.argv[2]);
 const target = mkdtempSync(join(tmpdir(), 'azsign-access-patch-'));
 for (const file of ['Cargo.toml', 'libs/hbb_common/Cargo.toml', 'libs/hbb_common/src/lib.rs',
   'libs/hbb_common/src/socket_client.rs', 'libs/hbb_common/src/udp.rs', 'flutter/ndk_arm.sh',
-  'flutter/android/app/src/main/AndroidManifest.xml', 'src/rendezvous_mediator.rs']) {
+  'flutter/android/app/src/main/AndroidManifest.xml', 'flutter/android/app/build.gradle', 'src/rendezvous_mediator.rs']) {
   mkdirSync(dirname(join(target, file)), { recursive: true });
   copyFileSync(join(source, file), join(target, file));
 }

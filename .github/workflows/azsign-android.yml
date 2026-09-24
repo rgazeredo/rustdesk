@@ -460,6 +460,18 @@ jobs:
       - name: Aplicar transporte autenticado isolado (PoC, nunca produção)
         run: node pilot-support/.github/azsign-access-poc/apply.mjs .
 
+      - name: Validar geração de identidade e prova de posse (sem chave no build)
+        run: |
+          set -euo pipefail
+          export BC_TEST_DEPS="$RUNNER_TEMP/azsign-bc-test"
+          mkdir -p "$BC_TEST_DEPS"
+          for artifact in bcpkix bcprov bcutil; do
+            curl --fail --silent --show-error --location \
+              "https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}-jdk15to18/1.86/${artifact}-jdk15to18-1.86.jar" \
+              -o "$BC_TEST_DEPS/${artifact}.jar"
+          done
+          node pilot-support/.github/azsign-access-poc/identity.test.mjs
+
       - name: Aplicar navegação D-pad por acessibilidade (sem root)
         run: node pilot-support/.github/azsign-dpad/apply.mjs .
 
@@ -549,7 +561,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v17 --build-number=3077
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v18 --build-number=3078
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
