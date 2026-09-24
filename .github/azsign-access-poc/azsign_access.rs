@@ -1,7 +1,7 @@
 //! Test-build-only transport. Never falls back to an unprotected endpoint.
 use crate::{anyhow::{bail, Context}, tcp::FramedStream, ResultType};
 use serde_derive::Deserialize;
-use std::{path::PathBuf, sync::Arc};
+use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsConnector, rustls::{self, ClientConfig, RootCertStore, pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName}}};
 
