@@ -4,13 +4,15 @@ name: AZSign — APK Android customizado
 # da AZSign. Somente armeabi-v7a: é a ABI dos TV Box homologados, e compilar só
 # uma arquitetura corta o tempo de build para um quarto.
 #
-# Servidor e chave NÃO ficam no repositório — vêm de secrets e são injetados
-# no config.rs antes de compilar. Assim o fork pode ser público (Actions grátis
-# ilimitado) sem expor o endereço do servidor.
+# Endereços e chave pública ficam explícitos neste build de migração.
+# Somente a assinatura de distribuição usa secrets; nenhuma chave privada
+# do servidor deve ser incluída no APK ou neste repositório.
 #
 # Secrets necessários em Settings → Secrets and variables → Actions:
-#   RUSTDESK_HOST     ex.: 74.208.72.16
-#   RUSTDESK_PUB_KEY  a chave pública do hbbs (id_ed25519.pub)
+#   AZSIGN_ANDROID_KEYSTORE_BASE64  keystore de distribuição codificado em base64
+#   AZSIGN_ANDROID_KEY_ALIAS        alias da chave
+#   AZSIGN_ANDROID_KEYSTORE_PASSWORD
+#   AZSIGN_ANDROID_KEY_PASSWORD
 
 on:
   workflow_dispatch:
@@ -75,19 +77,57 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: ${{ secrets.RUSTDESK_HOST }}
-          PUBKEY: ${{ secrets.RUSTDESK_PUB_KEY }}
+          HOST: 127.0.0.1
+          RELAY: 127.0.0.1:21117
+          PUBKEY: syz0DP1/OFnaP8CenzOKiAvMfk1nolNEeFf8vfk2WT8=
         run: |
           set -euo pipefail
-          test -n "$HOST"   || { echo "::error::secret RUSTDESK_HOST não definido"; exit 1; }
-          test -n "$PUBKEY" || { echo "::error::secret RUSTDESK_PUB_KEY não definido"; exit 1; }
+          test -n "$HOST"
+          test -n "$RELAY"
+          test -n "$PUBKEY"
 
           CFG=libs/hbb_common/src/config.rs
           test -f "$CFG" || { echo "::error::$CFG não existe — submódulo não veio"; exit 1; }
 
-          # 1 e 2: servidor e chave pública
-          sed -i "s|pub const RENDEZVOUS_SERVERS: &\[&str\] = &\[\"[^\"]*\"\];|pub const RENDEZVOUS_SERVERS: \&[\&str] = \&[\"$HOST\"];|" "$CFG"
-          sed -i "s|pub const RS_PUB_KEY: &str = \"[^\"]*\";|pub const RS_PUB_KEY: \&str = \"$PUBKEY\";|" "$CFG"
+          python3 - <<'PYEOF'
+          import base64
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          host, relay, key = (os.environ[name] for name in ('HOST', 'RELAY', 'PUBKEY'))
+          assert len(base64.b64decode(key, validate=True)) == 32, 'Chave pública inválida'
+          assert re.fullmatch(r'[a-z0-9.-]+', host), 'Host inválido'
+          assert relay == host + ':21117', 'Relay inesperado'
+          path = Path('libs/hbb_common/src/config.rs')
+          src = path.read_text()
+          replacements = [
+              (r'pub const RENDEZVOUS_SERVERS: &\[&str\] = &\["[^"]*"\];',
+               'pub const RENDEZVOUS_SERVERS: &[&str] = &[' + json.dumps(host) + '];'),
+              (r'pub const RS_PUB_KEY: &str = "[^"]*";',
+               'pub const RS_PUB_KEY: &str = ' + json.dumps(key) + ';'),
+          ]
+          for pattern, value in replacements:
+              src, count = re.subn(pattern, lambda _: value, src)
+              assert count == 1, f'Alvo de configuração inesperado: {pattern}: {count}'
+
+          # A configuração gerenciada também cobre upgrades com servidor antigo
+          # salvo e a inicialização nativa no boot, antes de abrir o Flutter.
+          old = 'pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = Default::default();'
+          assert src.count(old) == 1, 'Alvo OVERWRITE_SETTINGS inesperado'
+          entries = ',\n'.join(
+              f'            ({json.dumps(name)}.to_owned(), {json.dumps(value)}.to_owned())'
+              for name, value in [('custom-rendezvous-server', host), ('relay-server', relay), ('key', key), ('disable-tcp-listen', 'Y'), ('force-always-relay', 'Y')]
+          )
+          new = ('pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = {\n'
+                 '        #[cfg(target_os = "android")]\n'
+                 '        { RwLock::new(HashMap::from([\n' + entries + '\n        ])) }\n'
+                 '        #[cfg(not(target_os = "android"))]\n'
+                 '        { Default::default() }\n'
+                 '    };')
+          path.write_text(src.replace(old, new))
+          PYEOF
 
           # 3: iniciar na inicialização — default do SharedPreferences.
           #    Não é alcançável por OVERWRITE_SETTINGS: vive fora do config do Rust.
@@ -96,7 +136,7 @@ jobs:
           sed -i 's|getBoolean(KEY_START_ON_BOOT_OPT, false)|getBoolean(KEY_START_ON_BOOT_OPT, true)|g' "$BOOT" "$MAIN"
 
           echo "--- conferindo o que ficou gravado:"
-          grep -n "RENDEZVOUS_SERVERS\|RS_PUB_KEY" "$CFG" | sed 's/'"$PUBKEY"'/<chave oculta>/'
+          grep -n "RENDEZVOUS_SERVERS\|RS_PUB_KEY" "$CFG" | sed 's|RS_PUB_KEY.*|RS_PUB_KEY: <chave oculta>|'
           grep -n "KEY_START_ON_BOOT_OPT" "$BOOT" "$MAIN"
 
       # ------------------------------------------------------------------
@@ -246,7 +286,194 @@ jobs:
               '  }\n',
               'publicador de ID na abertura',
           )
+          # --- 4. Sincronizar controle também no boot sem Flutter ---------
+          # InputService pode conectar antes do MainService; só escrevemos
+          # opções depois que startServer definiu o diretório da configuração.
+          patch(
+              'flutter/android/app/src/main/kotlin/ffi.kt',
+              '    external fun startService()\n',
+              '    external fun startService()\n'
+              '    external fun setInputServiceEnabled(enabled: Boolean)\n',
+              'ponte nativa do estado de controle',
+          )
+          patch(
+              'src/flutter_ffi.rs',
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_startService(',
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_setInputServiceEnabled(\n'
+              '        _env: JNIEnv,\n'
+              '        _class: JClass,\n'
+              '        enabled: jboolean,\n'
+              '    ) {\n'
+              '        let value = if enabled != 0 { "" } else { "N" };\n'
+              '        log::info!("AZSign: input service enabled={}", enabled != 0);\n'
+              '        super::main_set_option(\n'
+              '            config::keys::OPTION_ENABLE_KEYBOARD.to_owned(),\n'
+              '            value.to_owned(),\n'
+              '        );\n'
+              '    }\n\n'
+              '    #[no_mangle]\n'
+              '    pub unsafe extern "system" fn Java_ffi_FFI_startService(',
+              'atualizar configuração e permissões das sessões',
+          )
+          INPUT = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/InputService.kt'
+          patch(
+              INPUT,
+              '        var ctx: InputService? = null\n',
+              '        var ctx: InputService? = null\n'
+              '        private var azsignServerReady = false\n\n'
+              '        fun azsignServerStarted() {\n'
+              '            azsignServerReady = true\n'
+              '            azsignSyncInputState()\n'
+              '        }\n\n'
+              '        fun azsignServerStopped() {\n'
+              '            azsignServerReady = false\n'
+              '        }\n\n'
+              '        private fun azsignSyncInputState() {\n'
+              '            if (azsignServerReady) {\n'
+              '                ffi.FFI.setInputServiceEnabled(isOpen)\n'
+              '            }\n'
+              '        }\n',
+              'sincronização nativa após inicialização da configuração',
+          )
+          patch(
+              INPUT,
+              '    private fun notifyInputState() {\n',
+              '    private fun notifyInputState() {\n'
+              '        azsignSyncInputState()\n',
+              'publicar conexão e desconexão da acessibilidade',
+          )
+          SERVICE = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/MainService.kt'
+          patch(
+              SERVICE,
+              '        FFI.startServer(configPath, "")\n',
+              '        FFI.startServer(configPath, "")\n'
+              '        InputService.azsignServerStarted()\n',
+              'restaurar estado no boot sem Activity',
+          )
+          patch(
+              SERVICE,
+              '    override fun onDestroy() {\n',
+              '    override fun onDestroy() {\n'
+              '        InputService.azsignServerStopped()\n',
+              'encerrar sincronização junto com o servidor',
+          )
+          patch(
+              MODEL,
+              '    // Initial keyboard status is off on mobile\n'
+              '    if (isMobile) {\n',
+              '    // AZSign: Android input permission follows the native service lifecycle.\n'
+              '    if (isIOS) {\n',
+              'não sobrescrever estado Android ao abrir Flutter',
+          )
+          patch(
+              MODEL,
+              "      case \"input\":\n        if (_inputOk != value) {\n",
+              "      case \"input\":\n        if (!isAndroid && _inputOk != value) {\n",
+              'Android nativo é a fonte da permissão de controle',
+          )
+          # --- 5. Desativar áudio no player AZSign ------------------------
+          # Alguns firmwares Amlogic Android 11 abortam nativamente em
+          # AudioRecord.getMinFrameCount() quando o RustDesk tenta iniciar
+          # playback capture. Isso derruba a sessão logo após a senha e faz
+          # o cliente mostrar "connection reset by peer". O player precisa
+          # de vídeo e entrada, não de áudio remoto.
+          patch(
+              SERVICE,
+              '        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n'
+              '            if (!audioRecordHandle.createAudioRecorder(false, mediaProjection)) {\n'
+              '                Log.d(logTag, "createAudioRecorder fail")\n'
+              '            } else {\n'
+              '                Log.d(logTag, "audio recorder start")\n'
+              '                audioRecordHandle.startAudioRecorder()\n'
+              '            }\n'
+              '        }\n',
+              '        // AZSign: áudio remoto desativado para compatibilidade com TV Box.\n'
+              '        Log.d(logTag, "AZSign: audio capture disabled for TV box compatibility")\n',
+              'captura de áudio desativada nos TV Box',
+          )
+          # --- 6. Duração mínima dos toques -------------------------------
+          # Hipótese de compatibilidade em teste. O mínimo de 40 ms sozinho
+          # não resolveu os cliques no Aquário; os callbacks abaixo permitem
+          # investigar a execução real dos gestos no framework.
+          patch(
+              INPUT,
+              '        if (duration <= 0) {\n'
+              '            duration = 1\n'
+              '        }\n',
+              '        duration = duration.coerceAtLeast(40L)\n',
+              'duração mínima dos gestos de toque',
+          )
+          patch(
+              INPUT,
+              '    private val logTag = "input service"\n',
+              '    private val logTag = "input service"\n'
+              '    private val azsignGestureSequence = java.util.concurrent.atomic.AtomicLong(0)\n',
+              'sequência de diagnóstico de gestos',
+          )
+          patch(
+              INPUT,
+              '                Log.d(logTag, "doDispatchGesture x:$x y:$y time:$duration")\n'
+              '                dispatchGesture(builder.build(), null, null)\n',
+              '                val diagnosticId = azsignGestureSequence.incrementAndGet()\n'
+              '                val submittedAt = android.os.SystemClock.uptimeMillis()\n'
+              '                Log.i("AZSignGesture", "submit id=$diagnosticId duration=$duration continue=$willContinue")\n'
+              '                val accepted = dispatchGesture(builder.build(), object : android.accessibilityservice.AccessibilityService.GestureResultCallback() {\n'
+              '                    override fun onCompleted(gestureDescription: GestureDescription) {\n'
+              '                        Log.i("AZSignGesture", "completed id=$diagnosticId elapsed=${android.os.SystemClock.uptimeMillis() - submittedAt}")\n'
+              '                    }\n'
+              '                    override fun onCancelled(gestureDescription: GestureDescription) {\n'
+              '                        Log.w("AZSignGesture", "cancelled id=$diagnosticId elapsed=${android.os.SystemClock.uptimeMillis() - submittedAt}")\n'
+              '                    }\n'
+              '                }, android.os.Handler(android.os.Looper.getMainLooper()))\n'
+              '                Log.i("AZSignGesture", "accepted id=$diagnosticId value=$accepted")\n',
+              'retorno e callbacks dos gestos de toque',
+          )
           PYEOF
+
+      - name: Checkout do protótipo de entrada root
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: pilot-support
+          sparse-checkout: |
+            .github/azsign-root-input
+            .github/azsign-aquario-input
+            .github/azsign-smartpro-input
+            .github/azsign-password-confirmation
+            .github/azsign-access-poc
+            .github/azsign-dpad
+
+      - name: Aplicar protótipo MCD-125 (opt-in)
+        run: python3 pilot-support/.github/azsign-root-input/apply.py
+
+      - name: Aplicar piloto de clique nativo Aquário
+        run: python3 pilot-support/.github/azsign-aquario-input/apply.py
+
+      - name: Aplicar recuperação de acessibilidade SmartPro
+        run: python3 pilot-support/.github/azsign-smartpro-input/apply.py
+
+      - name: Aplicar confirmação de senha AZSign (somente ADB)
+        run: node pilot-support/.github/azsign-password-confirmation/apply.mjs .
+
+      - name: Aplicar transporte autenticado isolado (PoC, nunca produção)
+        run: node pilot-support/.github/azsign-access-poc/apply.mjs .
+
+      - name: Validar geração de identidade e prova de posse (sem chave no build)
+        run: |
+          set -euo pipefail
+          export BC_TEST_DEPS="$RUNNER_TEMP/azsign-bc-test"
+          mkdir -p "$BC_TEST_DEPS"
+          for artifact in bcpkix bcprov bcutil; do
+            curl --fail --silent --show-error --location \
+              "https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}-jdk15to18/1.86/${artifact}-jdk15to18-1.86.jar" \
+              -o "$BC_TEST_DEPS/${artifact}.jar"
+          done
+          node pilot-support/.github/azsign-access-poc/identity.test.mjs
+
+      - name: Aplicar navegação D-pad por acessibilidade (sem root)
+        run: node pilot-support/.github/azsign-dpad/apply.mjs .
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
@@ -312,14 +539,29 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+          KEYSTORE_BASE64: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.AZSIGN_ANDROID_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.AZSIGN_ANDROID_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::secret AZSIGN_ANDROID_KEYSTORE_BASE64 não definido"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "::error::secret AZSIGN_ANDROID_KEY_ALIAS não definido"; exit 1; }
+          test -n "$KEYSTORE_PASSWORD" || { echo "::error::secret AZSIGN_ANDROID_KEYSTORE_PASSWORD não definido"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "::error::secret AZSIGN_ANDROID_KEY_PASSWORD não definido"; exit 1; }
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
-          sed -i "s/signingConfigs.release/signingConfigs.debug/g" ./flutter/android/app/build.gradle
+          echo "$KEYSTORE_BASE64" | base64 --decode > ./flutter/android/app/azsign-release.jks
+          cat > ./flutter/android/key.properties <<EOF
+          storeFile=azsign-release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v18 --build-number=3078
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
