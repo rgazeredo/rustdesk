@@ -1,0 +1,28 @@
+import { readFileSync, writeFileSync, copyFileSync } from 'node:fs';
+import { resolve, join } from 'node:path';
+const root = resolve(process.argv[2] ?? '.');
+function patch(file, old, value) {
+  const path = join(root, file);
+  const source = readFileSync(path, 'utf8');
+  if (source.split(old).length !== 2) throw new Error(`Unexpected patch target: ${file}`);
+  writeFileSync(path, source.replace(old, () => value));
+}
+patch('libs/hbb_common/Cargo.toml', 'default = []', 'default = []\nazsign-access-poc = []');
+patch('Cargo.toml', '[features]', '[features]\nazsign-access-poc = ["hbb_common/azsign-access-poc"]');
+patch('libs/hbb_common/src/lib.rs', 'pub mod socket_client;', '#[cfg(feature = "azsign-access-poc")]\npub mod azsign_access;\npub mod socket_client;');
+copyFileSync(join(import.meta.dirname, 'azsign_access.rs'), join(root, 'libs/hbb_common/src/azsign_access.rs'));
+patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<crate::Stream> {', ') -> ResultType<crate::Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
+patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<Stream> {', ') -> ResultType<Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
+patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::udp(target, ms_timeout).await;');
+patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<Option<(FramedSocket, TargetAddr<\'static>)>> {', ') -> ResultType<Option<(FramedSocket, TargetAddr<\'static>)>> {\n    #[cfg(feature = "azsign-access-poc")]\n    return Ok(Some(crate::azsign_access::udp(target, 5000).await?));');
+patch('libs/hbb_common/src/udp.rs', 'pub enum FramedSocket {', 'pub enum FramedSocket {\n    #[cfg(feature = "azsign-access-poc")]\n    AzsignAccess(crate::tcp::FramedStream, TargetAddr<\'static>),');
+patch('libs/hbb_common/src/udp.rs', '            Self::ProxySocks(f) => f.send((send_data, addr)).await?,', '            #[cfg(feature = "azsign-access-poc")]\n            Self::AzsignAccess(f, allowed) => {\n                if addr.to_string() != allowed.to_string() { anyhow::bail!("PoC UDP destination denied"); }\n                f.send_bytes(send_data).await?;\n            },\n            Self::ProxySocks(f) => f.send((send_data, addr)).await?,');
+patch('libs/hbb_common/src/udp.rs', '            Self::ProxySocks(f) => f.send((Bytes::from(msg), addr)).await?,', '            #[cfg(feature = "azsign-access-poc")]\n            Self::AzsignAccess(_, _) => anyhow::bail!("PoC raw UDP denied"),\n            Self::ProxySocks(f) => f.send((Bytes::from(msg), addr)).await?,');
+patch('libs/hbb_common/src/udp.rs', '            Self::ProxySocks(f) => match f.next().await {', '            #[cfg(feature = "azsign-access-poc")]\n            Self::AzsignAccess(f, addr) => f.next().await.map(|result| result.map(|bytes| (bytes, addr.clone())).map_err(Into::into)),\n            Self::ProxySocks(f) => match f.next().await {');
+patch('flutter/ndk_arm.sh', '--features flutter,hwcodec', '--features flutter,hwcodec,azsign-access-poc');
+const java = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/';
+copyFileSync(join(import.meta.dirname, 'AzsignAccessPocProvider.java'), join(root, java, 'AzsignAccessPocProvider.java'));
+patch('flutter/android/app/src/main/AndroidManifest.xml', '</application>', '    <provider android:name=".AzsignAccessPocProvider" android:authorities="com.carriez.flutter_hbb.azsign.accesspoc" android:exported="true" />\n    </application>');
+patch('libs/hbb_common/src/socket_client.rs', 'pub async fn new_direct_udp_for(target: &str) -> ResultType<(Arc<UdpSocket>, SocketAddr)> {', 'pub async fn new_direct_udp_for(target: &str) -> ResultType<(Arc<UdpSocket>, SocketAddr)> {\n    #[cfg(feature = "azsign-access-poc")]\n    anyhow::bail!("PoC direct UDP denied");');
+patch('src/rendezvous_mediator.rs', 'async fn direct_server(server: ServerPtr) {', 'async fn direct_server(server: ServerPtr) {\n    #[cfg(feature = "azsign-access-poc")]\n    return;');
+console.log('PoC transport hooks applied; no credentials embedded');

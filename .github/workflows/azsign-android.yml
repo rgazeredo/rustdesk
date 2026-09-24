@@ -77,9 +77,9 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: rustdesk.azsign.com.br
-          RELAY: rustdesk.azsign.com.br:21117
-          PUBKEY: vqn40KhffTpN889pMZr5MAuOjactjjlTw9iQgCXmqu8=
+          HOST: azsign-poc.invalid
+          RELAY: azsign-poc.invalid:21117
+          PUBKEY: QO71FdlktXVSEa5EElPdYUqWpeTeFiYNJlszH8fiCy0=
         run: |
           set -euo pipefail
           test -n "$HOST"
@@ -118,7 +118,7 @@ jobs:
           assert src.count(old) == 1, 'Alvo OVERWRITE_SETTINGS inesperado'
           entries = ',\n'.join(
               f'            ({json.dumps(name)}.to_owned(), {json.dumps(value)}.to_owned())'
-              for name, value in [('custom-rendezvous-server', host), ('relay-server', relay), ('key', key)]
+              for name, value in [('custom-rendezvous-server', host), ('relay-server', relay), ('key', key), ('disable-tcp-listen', 'Y'), ('force-always-relay', 'Y')]
           )
           new = ('pub static ref OVERWRITE_SETTINGS: RwLock<HashMap<String, String>> = {\n'
                  '        #[cfg(target_os = "android")]\n'
@@ -442,6 +442,7 @@ jobs:
             .github/azsign-aquario-input
             .github/azsign-smartpro-input
             .github/azsign-password-confirmation
+            .github/azsign-access-poc
 
       - name: Aplicar protótipo MCD-125 (opt-in)
         run: python3 pilot-support/.github/azsign-root-input/apply.py
@@ -454,6 +455,9 @@ jobs:
 
       - name: Aplicar confirmação de senha AZSign (somente ADB)
         run: node pilot-support/.github/azsign-password-confirmation/apply.mjs .
+
+      - name: Aplicar transporte autenticado isolado (PoC, nunca produção)
+        run: node pilot-support/.github/azsign-access-poc/apply.mjs .
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
@@ -541,7 +545,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-universal-v14 --build-number=3074
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v15 --build-number=3075
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
