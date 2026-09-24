@@ -443,6 +443,7 @@ jobs:
             .github/azsign-smartpro-input
             .github/azsign-password-confirmation
             .github/azsign-access-poc
+            .github/azsign-dpad
 
       - name: Aplicar protótipo MCD-125 (opt-in)
         run: python3 pilot-support/.github/azsign-root-input/apply.py
@@ -458,6 +459,9 @@ jobs:
 
       - name: Aplicar transporte autenticado isolado (PoC, nunca produção)
         run: node pilot-support/.github/azsign-access-poc/apply.mjs .
+
+      - name: Aplicar navegação D-pad por acessibilidade (sem root)
+        run: node pilot-support/.github/azsign-dpad/apply.mjs .
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
@@ -545,7 +549,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v15 --build-number=3075
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-access-poc-v16 --build-number=3076
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
