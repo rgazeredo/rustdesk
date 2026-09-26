@@ -11,7 +11,8 @@ const classes = join(work, 'classes'); mkdirSync(classes);
 const classpath = `${resolve(deps)}/*`;
 execFileSync('javac', ['-cp', classpath, '-d', classes, join(import.meta.dirname, 'AzsignAccessIdentity.java'), join(import.meta.dirname, 'IdentityTest.java')]);
 // Also typecheck the Android provider, without running Android stub methods on JVM.
-if (process.env.ANDROID_TEST_JAR) execFileSync('javac', ['-cp', `${classpath}:${classes}:${process.env.ANDROID_TEST_JAR}`, '-d', classes, join(import.meta.dirname, 'AzsignAccessPocProvider.java')]);
+if (process.env.ANDROID_TEST_JAR) execFileSync('javac', ['-cp', `${process.env.ANDROID_TEST_JAR}:${classpath}:${classes}`, '-d', classes,
+  ...['AzsignRenewalScheduler.java', 'AzsignRenewalHttp.java', 'AzsignRenewalRuntime.java', 'AzsignAccessPocProvider.java'].map(file => join(import.meta.dirname, file))]);
 const id = 'baf3c149-b169-40bf-ac25-47d269930a41';
 const dir = join(work, 'device');
 const java = (...args) => execFileSync('java', ['-cp', `${classpath}:${classes}`, 'IdentityTest', ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -38,4 +39,4 @@ const provider = readFileSync(join(import.meta.dirname, 'AzsignAccessPocProvider
 assert.match(provider, /uid != 2000 && uid != 0/);
 assert.match(provider, /File import\/export disabled/);
 assert.doesNotMatch(provider, /getPrivate|key\.der/);
-console.log('Enrollment crypto and Android provider compilation passed (CSR proof, stable key, identity/key/EKU rejection, private permissions).');
+console.log('Enrollment crypto passed (CSR proof, stable key, identity/key/EKU rejection, private permissions). Provider compilation: ' + (process.env.ANDROID_TEST_JAR ? 'passed' : 'not run (ANDROID_TEST_JAR missing)'));

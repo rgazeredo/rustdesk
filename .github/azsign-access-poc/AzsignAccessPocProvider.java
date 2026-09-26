@@ -27,6 +27,7 @@ public final class AzsignAccessPocProvider extends ContentProvider {
             AzsignAccessIdentity identity = new AzsignAccessIdentity(dir);
             Bundle result = new Bundle();
             result.putInt("protocol", 2);
+            result.putInt("renewal_protocol", 1);
             result.putString("identity_id", id);
             if ("prepare-identity".equals(method)) {
                 result.putString("csr_base64", Base64.encodeToString(identity.prepare(id), Base64.NO_WRAP));
@@ -51,6 +52,9 @@ public final class AzsignAccessPocProvider extends ContentProvider {
                 active.put("certificate_base64", Base64.encodeToString(cert, Base64.NO_WRAP));
                 active.put("ca_base64", Base64.encodeToString(ca, Base64.NO_WRAP));
                 active.put("expires_at", leaf.getNotAfter().getTime());
+                String renewalOrigin = extras.getString("renewal_origin");
+                if (renewalOrigin != null) active.put("renewal_origin", AzsignRenewalHttp.validateOrigin(renewalOrigin));
+                AzsignRenewalRuntime.stop();
                 AtomicFile file = new AtomicFile(new File(dir, "active.json"));
                 FileOutputStream stream = null;
                 try {
@@ -60,6 +64,8 @@ public final class AzsignAccessPocProvider extends ContentProvider {
                 } catch (Exception error) {
                     if (stream != null) file.failWrite(stream);
                     throw error;
+                } finally {
+                    AzsignRenewalRuntime.start(getContext().getFilesDir());
                 }
                 result.putString("status", "activated");
             } else throw new IllegalArgumentException("Unsupported enrollment operation");

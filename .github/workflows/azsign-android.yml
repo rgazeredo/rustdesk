@@ -470,7 +470,11 @@ jobs:
               "https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}-jdk15to18/1.86/${artifact}-jdk15to18-1.86.jar" \
               -o "$BC_TEST_DEPS/${artifact}.jar"
           done
+          curl --fail --silent --show-error --location \
+            "https://repo.maven.apache.org/maven2/org/json/json/20180813/json-20180813.jar" \
+            -o "$BC_TEST_DEPS/json.jar"
           node pilot-support/.github/azsign-access-poc/identity.test.mjs
+          node pilot-support/.github/azsign-access-poc/renewal.test.mjs
 
       - name: Aplicar navegação D-pad por acessibilidade (sem root)
         run: node pilot-support/.github/azsign-dpad/apply.mjs .

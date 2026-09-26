@@ -23,11 +23,30 @@ No production deployment or APK installation performed.
   signature verification, different nonce, profile/CA substitution, certificate
   replay, temporary block, permanent revocation and expired certificate.
 
+## Android integration added (local, not deployed)
+
+- Real HTTPS challenge/renew adapter with platform web PKI, no redirects, bounded
+  responses, timeouts, fingerprint binding and cancellation. Remote enrollment CA
+  is not installed as web trust. Revocation is only accepted after proof submission.
+- One scheduler per process, started by the patched MainApplication and restarted
+  after provider activation. Existing RustDesk boot receiver/service behavior and
+  its permissions are preserved. Automatic boot still requires that setup enabled
+  the existing start-on-boot option and Android allows the app to start.
+- Stops do not wait on network responses; a late response cannot overwrite a newer
+  enrollment. Private atomic writes preserve renewal metadata and local key.
+- Setup branch `fix/setup-renewal-origin` passes the connected CMS origin, never
+  its bearer token. New capability `renewal_protocol=1` prevents silent enrollment
+  with an older APK. Existing enrollments without an origin need one Setup update.
+- JVM tests cover the production HTTP adapter through a fake connection boundary,
+  runtime restart from disk, cancellation, real CSR/proof/certificates, blocks,
+  revocation and expiry. Provider and helpers compile against Android API 34.
+- Setup: 401 tests and Node/Web typechecks passed in Docker.
+
 ## Not finished / not safe to publish as complete
 
 - CMS renewal challenge/issuance endpoints and one-time replay protection.
-- Android HTTPS renewal transport, initialization after enrollment/on startup,
-  cancellation/reload behavior and device restart/offline integration tests.
+- Android device reboot/offline integration tests against the real CMS and a
+  complete native APK build (JVM/API compilation is not an APK build).
 - Desktop native secure storage, real HTTP adapters, operator key/certificate
   enrollment and binding the Flutter screens to the production application.
 - CMS browser authorization and scoped Address Book endpoints, including client

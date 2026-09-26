@@ -90,6 +90,35 @@ public final class RenewalTest {
             } finally {
                 exec.shutdownNow();
             }
+        } else if ("test-cancel".equals(command)) {
+            byte[] before = Files.readAllBytes(new File(dir, "active.json").toPath());
+            java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+            RenewalTransport delayed = new RenewalTransport() {
+                public String requestChallenge(String id) { return "single-use-challenge-nonce"; }
+                public RenewalPayload submitRenewal(String id, byte[] csr, String nonce, String proof) throws Exception {
+                    entered.countDown();
+                    if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("Cancellation blocked behind network");
+                    JSONObject active = new JSONObject(new String(before, StandardCharsets.UTF_8));
+                    return new RenewalPayload(Files.readAllBytes(new File(args[3]).toPath()), Files.readAllBytes(new File(args[4]).toPath()), active.getJSONObject("profile"));
+                }
+            };
+            ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
+            java.util.concurrent.ExecutorService worker = Executors.newSingleThreadExecutor();
+            AzsignRenewalScheduler scheduler = new AzsignRenewalScheduler(dir, delayed, exec);
+            try {
+                java.util.concurrent.Future<?> future = worker.submit(() -> {
+                    try { scheduler.performRenewalNow(); throw new AssertionError("Cancelled renewal committed"); }
+                    catch (java.io.InterruptedIOException expected) {}
+                    catch (Exception error) { throw new RuntimeException(error); }
+                });
+                if (!entered.await(3, java.util.concurrent.TimeUnit.SECONDS)) throw new AssertionError("No request");
+                scheduler.stop();
+                release.countDown();
+                future.get(3, java.util.concurrent.TimeUnit.SECONDS);
+                if (!Arrays.equals(before, Files.readAllBytes(new File(dir, "active.json").toPath()))) throw new AssertionError("Late response overwrote enrollment");
+                System.out.println("cancel-verified");
+            } finally { release.countDown(); scheduler.close(); worker.shutdownNow(); }
         } else if ("test-blocked".equals(command)) {
             byte[] before = Files.readAllBytes(new File(dir, "active.json").toPath());
             RenewalTransport blocked = new RenewalTransport() {

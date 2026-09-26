@@ -1,6 +1,6 @@
 // Autonomous renewal test for Android client
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
@@ -19,6 +19,10 @@ execFileSync('javac', [
   '-d', classes,
   join(import.meta.dirname, 'AzsignAccessIdentity.java'),
   join(import.meta.dirname, 'AzsignRenewalScheduler.java'),
+  join(import.meta.dirname, 'AzsignRenewalHttp.java'),
+  join(import.meta.dirname, 'AzsignRenewalRuntime.java'),
+  join(import.meta.dirname, 'RenewalHttpTest.java'),
+  join(import.meta.dirname, 'RenewalRuntimeTest.java'),
   join(import.meta.dirname, 'RenewalTest.java')
 ]);
 
@@ -50,6 +54,7 @@ const caDer = readFileSync(join(work, 'ca.der'));
 
 // Write initial active.json
 const activeJson = {
+  renewal_origin: 'https://app.azsign.com.br',
   identity_id: id,
   profile: {
     host: 'rustdesk.azsign.com.br',
@@ -63,12 +68,21 @@ const activeJson = {
   expires_at: Date.now() + 86400000
 };
 writeFileSync(join(dir, 'active.json'), JSON.stringify(activeJson));
+assert.equal(execFileSync('java', ['-cp', classpath, 'com.carriez.flutter_hbb.RenewalHttpTest', dir, id], {encoding: 'utf8'}).trim(), 'http-verified');
+console.log('✓ Real HTTP adapter: request shape, timeout, redirect refusal, bounded JSON, error classification and cancellation');
+const runtimeFiles = join(work, 'runtime-files');
+mkdirSync(runtimeFiles);
+cpSync(dir, join(runtimeFiles, 'azsign-access-poc'), {recursive: true});
+assert.equal(execFileSync('java', ['-cp', classpath, 'RenewalRuntimeTest', runtimeFiles], {encoding: 'utf8'}).trim(), 'runtime-verified');
+console.log('✓ Application runtime resumes enrollment from disk and prevents duplicate schedulers across restart');
 
 // 4. Issue renewed leaf cert (serial 2)
 openssl('x509', '-req', '-in', 'request.pem', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '2', '-days', '2', '-extfile', 'client.ext', '-out', 'renewed_client.pem');
 openssl('x509', '-in', 'renewed_client.pem', '-outform', 'DER', '-out', 'renewed_client.der');
 
 // Test 1: Successful autonomous renewal with key retention and atomic persistence
+assert.equal(java('test-cancel', dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der')).trim(), 'cancel-verified');
+console.log('✓ Cancellation does not wait for the network and a late response cannot overwrite enrollment');
 const res1 = java('test-success', dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der'));
 assert.equal(res1.trim(), 'success-verified');
 console.log('✓ Autonomous renewal succeeded: key retained, active.json atomically updated, transport authorized');
@@ -94,7 +108,30 @@ const expiredActive = {
 };
 writeFileSync(join(dir, 'active.json'), JSON.stringify(expiredActive));
 // Also generate an expired certificate with OpenSSL
-openssl('x509', '-req', '-in', 'request.pem', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '3', '-not_before', '20200101000000Z', '-not_after', '20200102000000Z', '-extfile', 'client.ext', '-out', 'expired_client.pem');
+// openssl ca supports explicit validity dates on OpenSSL 3.0 (CI) as well as 3.5.
+mkdirSync(join(work, 'issued'));
+writeFileSync(join(work, 'index.txt'), '');
+writeFileSync(join(work, 'serial'), '03\n');
+writeFileSync(join(work, 'expired.cnf'), `[ca]
+default_ca=test
+[test]
+database=index.txt
+new_certs_dir=issued
+certificate=ca.pem
+private_key=ca.key
+serial=serial
+default_md=sha256
+default_days=1
+policy=names
+x509_extensions=client
+[names]
+commonName=supplied
+[client]
+basicConstraints=critical,CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=clientAuth
+`);
+openssl('ca', '-batch', '-config', 'expired.cnf', '-in', 'request.pem', '-startdate', '20200101000000Z', '-enddate', '20200102000000Z', '-notext', '-out', 'expired_client.pem');
 openssl('x509', '-in', 'expired_client.pem', '-outform', 'DER', '-out', 'expired_client.der');
 expiredActive.certificate_base64 = readFileSync(join(work, 'expired_client.der')).toString('base64');
 writeFileSync(join(dir, 'active.json'), JSON.stringify(expiredActive));

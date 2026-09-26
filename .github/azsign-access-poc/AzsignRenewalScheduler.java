@@ -32,6 +32,7 @@ public final class AzsignRenewalScheduler {
         FAILED_RETRYING,
         REVOKED,
         EXPIRED,
+        REENROLLMENT_REQUIRED,
         STOPPED
     }
 
@@ -43,7 +44,12 @@ public final class AzsignRenewalScheduler {
         public BlockedException(String message) { super(message); }
     }
 
+    public static class ReenrollmentException extends Exception {
+        public ReenrollmentException(String message) { super(message); }
+    }
+
     public interface RenewalTransport {
+        default void cancel() {}
         /**
          * Requests a single-use renewal challenge from CMS for the identity.
          */
@@ -79,6 +85,8 @@ public final class AzsignRenewalScheduler {
     private final AtomicReference<State> state = new AtomicReference<>(State.IDLE);
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ScheduledFuture<?> scheduledTask = null;
+    private long generation = 0;
+    private final AtomicBoolean inFlight = new AtomicBoolean(false);
 
     private long baseRetryDelayMs = 60_000L; // 1 minute
     private long maxRetryDelayMs = 3_600_000L; // 1 hour
@@ -108,14 +116,21 @@ public final class AzsignRenewalScheduler {
     }
 
     public synchronized void stop() {
+        generation++;
         running.set(false);
         if (scheduledTask != null) {
             scheduledTask.cancel(true);
             scheduledTask = null;
         }
-        if (state.get() != State.REVOKED) {
+        transport.cancel();
+        if (state.get() != State.REVOKED && state.get() != State.REENROLLMENT_REQUIRED) {
             state.set(State.STOPPED);
         }
+    }
+
+    public void close() {
+        stop();
+        executor.shutdownNow();
     }
 
     public State getState() {
@@ -225,7 +240,16 @@ public final class AzsignRenewalScheduler {
      * 5. Validates returned certificate with local identity and CA.
      * 6. Commits new active.json atomically.
      */
-    public synchronized boolean performRenewalNow() throws Exception {
+    public boolean performRenewalNow() throws Exception {
+        if (!inFlight.compareAndSet(false, true)) throw new IOException("Renewal already in progress");
+        try {
+            return renew();
+        } finally { inFlight.set(false); }
+    }
+
+    private boolean renew() throws Exception {
+        final long attempt;
+        synchronized (this) { attempt = generation; }
         state.set(State.RENEWING);
 
         File activeFile = new File(directory, "active.json");
@@ -249,7 +273,12 @@ public final class AzsignRenewalScheduler {
         if (!java.security.MessageDigest.isEqual(enrolledCa, payload.ca)) {
             throw new SecurityException("Renewal cannot replace the enrolled authority");
         }
-        if (!active.getJSONObject("profile").similar(payload.profile)) {
+        JSONObject enrolledProfile = active.getJSONObject("profile");
+        boolean sameProfile = enrolledProfile.length() == 5 && payload.profile.length() == 5;
+        for (String field : new String[]{"host", "server_name", "registration", "rendezvous", "relay"}) {
+            sameProfile &= enrolledProfile.get(field).equals(payload.profile.get(field));
+        }
+        if (!sameProfile) {
             throw new SecurityException("Renewal cannot replace the enrolled gateway profile");
         }
         X509Certificate renewedLeaf = identity.verifyCertificate(identityId, payload.certificate, enrolledCa);
@@ -266,10 +295,15 @@ public final class AzsignRenewalScheduler {
         newActive.put("ca_base64", Base64.getEncoder().encodeToString(payload.ca));
         newActive.put("expires_at", renewedLeaf.getNotAfter().getTime());
 
-        writeAtomic(activeFile, newActive.toString().getBytes(StandardCharsets.UTF_8));
-
-        consecutiveFailures = 0;
-        state.set(State.RENEWED);
+        synchronized (this) {
+            if (attempt != generation || Thread.currentThread().isInterrupted()
+                || !java.util.Arrays.equals(bytes, AzsignAccessIdentity.readLimited(activeFile, 32768))) {
+                throw new InterruptedIOException("Enrollment changed during renewal");
+            }
+            writeAtomic(activeFile, newActive.toString().getBytes(StandardCharsets.UTF_8));
+            consecutiveFailures = 0;
+            state.set(State.RENEWED);
+        }
         return true;
     }
 
@@ -281,15 +315,26 @@ public final class AzsignRenewalScheduler {
     }
 
     public void runRenewalCycle() {
-        if (!running.get()) return;
+        final long attempt;
+        synchronized (this) {
+            if (!running.get()) return;
+            attempt = generation;
+        }
 
         try {
             performRenewalNow();
             // Reschedule next regular renewal based on the new certificate
             evaluateAndSchedule();
         } catch (RevokedException revoked) {
-            handleRevoked();
-        } catch (Throwable error) {
+            synchronized (this) { if (attempt == generation) handleRevoked(); }
+        } catch (ReenrollmentException required) {
+            synchronized (this) {
+                if (attempt == generation) {
+                    state.set(State.REENROLLMENT_REQUIRED);
+                    stop();
+                }
+            }
+        } catch (Exception error) {
             scheduleRetry();
         }
     }
@@ -305,13 +350,9 @@ public final class AzsignRenewalScheduler {
             throw new IOException("Cannot create directory: " + parent);
         }
         File temp = new File(parent, target.getName() + ".tmp." + System.nanoTime());
-        try (FileOutputStream out = new FileOutputStream(temp)) {
-            out.write(bytes);
-            out.getFD().sync();
-        }
-        if (!temp.renameTo(target)) {
-            temp.delete();
-            throw new IOException("Failed to atomically commit file: " + target);
-        }
+        try {
+            AzsignAccessIdentity.writePrivate(temp, bytes);
+            if (!temp.renameTo(target)) throw new IOException("Failed to atomically commit file: " + target);
+        } finally { if (temp.exists()) temp.delete(); }
     }
 }
