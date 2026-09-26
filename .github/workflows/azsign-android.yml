@@ -77,9 +77,9 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: 127.0.0.1
-          RELAY: 127.0.0.1:21117
-          PUBKEY: syz0DP1/OFnaP8CenzOKiAvMfk1nolNEeFf8vfk2WT8=
+          HOST: rustdesk.azsign.com.br
+          RELAY: rustdesk.azsign.com.br:21117
+          PUBKEY: ${{ secrets.AZSIGN_RUSTDESK_PUBKEY || 'syz0DP1/OFnaP8CenzOKiAvMfk1nolNEeFf8vfk2WT8=' }}
         run: |
           set -euo pipefail
           test -n "$HOST"

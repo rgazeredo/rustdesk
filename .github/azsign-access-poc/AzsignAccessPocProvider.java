@@ -34,7 +34,7 @@ public final class AzsignAccessPocProvider extends ContentProvider {
                 if (extras == null) throw new IllegalArgumentException("Enrollment required");
                 byte[] ca = decode(extras.getString("ca_base64"), 8192);
                 byte[] cert = decode(extras.getString("certificate_base64"), 8192);
-                identity.verifyCertificate(id, cert, ca);
+                java.security.cert.X509Certificate leaf = identity.verifyCertificate(id, cert, ca);
                 JSONObject profile = new JSONObject(new String(decode(extras.getString("profile_base64"), 2048), StandardCharsets.UTF_8));
                 if (profile.length() != 5) throw new IllegalArgumentException("Invalid profile");
                 for (String field : new String[]{"host", "server_name"}) {
@@ -50,6 +50,7 @@ public final class AzsignAccessPocProvider extends ContentProvider {
                 active.put("profile", profile);
                 active.put("certificate_base64", Base64.encodeToString(cert, Base64.NO_WRAP));
                 active.put("ca_base64", Base64.encodeToString(ca, Base64.NO_WRAP));
+                active.put("expires_at", leaf.getNotAfter().getTime());
                 AtomicFile file = new AtomicFile(new File(dir, "active.json"));
                 FileOutputStream stream = null;
                 try {

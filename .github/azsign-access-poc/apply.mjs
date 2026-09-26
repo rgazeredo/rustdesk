@@ -23,6 +23,7 @@ patch('flutter/ndk_arm.sh', '--features flutter,hwcodec', '--features flutter,hw
 const java = 'flutter/android/app/src/main/kotlin/com/carriez/flutter_hbb/';
 copyFileSync(join(import.meta.dirname, 'AzsignAccessPocProvider.java'), join(root, java, 'AzsignAccessPocProvider.java'));
 copyFileSync(join(import.meta.dirname, 'AzsignAccessIdentity.java'), join(root, java, 'AzsignAccessIdentity.java'));
+copyFileSync(join(import.meta.dirname, 'AzsignRenewalScheduler.java'), join(root, java, 'AzsignRenewalScheduler.java'));
 patch('flutter/android/app/build.gradle', 'dependencies {', "dependencies {\n    implementation 'org.bouncycastle:bcpkix-jdk15to18:1.86'");
 patch('flutter/android/app/src/main/AndroidManifest.xml', '</application>', '    <provider android:name=".AzsignAccessPocProvider" android:authorities="com.carriez.flutter_hbb.azsign.accesspoc" android:exported="true" />\n    </application>');
 patch('flutter/android/app/src/main/AndroidManifest.xml', 'android:name=".MainApplication"', 'android:name=".MainApplication"\n        android:allowBackup="false"');

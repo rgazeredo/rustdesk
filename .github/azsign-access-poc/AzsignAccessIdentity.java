@@ -64,7 +64,7 @@ public final class AzsignAccessIdentity {
         return new KeyPair(pub, key);
     }
 
-    public void verifyCertificate(String id, byte[] certificate, byte[] authority) throws Exception {
+    public X509Certificate verifyCertificate(String id, byte[] certificate, byte[] authority) throws Exception {
         KeyPair pair = load(id);
         CertificateFactory factory = CertificateFactory.getInstance("X.509");
         X509Certificate leaf = (X509Certificate) factory.generateCertificate(new ByteArrayInputStream(certificate));
@@ -81,6 +81,7 @@ public final class AzsignAccessIdentity {
             throw new SecurityException("Certificate does not authorize this identity");
         }
         leaf.verify(ca.getPublicKey());
+        return leaf;
     }
 
     public static byte[] readLimited(File path, int maximum) throws IOException {
