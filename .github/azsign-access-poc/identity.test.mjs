@@ -19,6 +19,7 @@ const java = (...args) => execFileSync('java', ['-cp', `${classpath}:${classes}`
 const openssl = (...args) => execFileSync('openssl', args, { cwd: work, stdio: ['ignore', 'pipe', 'pipe'] });
 const csr = java('prepare', dir, id);
 assert.equal(csr, java('prepare', dir, id), 're-enrollment must retain key and CSR');
+assert.equal(csr, java('prepare-noncrt', dir, id), 'Android non-CRT private key must retain the same valid CSR');
 assert.equal(statSync(join(dir, 'identity/key.der')).mode & 0o777, 0o600);
 assert.throws(() => java('prepare', dir, 'baf3c149-b169-40bf-ac25-47d269930a42'), 'another identity must not reuse key');
 assert.throws(() => java('prepare', dir, '../invalid'), 'reject path traversal');

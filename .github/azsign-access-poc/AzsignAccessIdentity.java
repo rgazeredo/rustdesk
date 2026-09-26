@@ -3,7 +3,7 @@ package com.carriez.flutter_hbb;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.security.interfaces.RSAPrivateCrtKey;
+import java.security.interfaces.RSAKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.security.cert.CertificateFactory;
@@ -57,10 +57,18 @@ public final class AzsignAccessIdentity {
         File identity = new File(directory, "identity");
         String saved = new String(readLimited(new File(identity, "id"), 36), StandardCharsets.US_ASCII);
         if (!identityId(id).equals(saved)) throw new SecurityException("Device is enrolled to another identity");
-        RSAPrivateCrtKey key = (RSAPrivateCrtKey) KeyFactory.getInstance("RSA").generatePrivate(
-            new PKCS8EncodedKeySpec(readLimited(new File(identity, "key.der"), 8192)));
-        if (key.getModulus().bitLength() != 2048) throw new SecurityException("Unexpected key size");
-        PublicKey pub = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(key.getModulus(), key.getPublicExponent()));
+        byte[] encoded = readLimited(new File(identity, "key.der"), 8192);
+        PrivateKey key = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(encoded));
+        // Android Conscrypt may expose only RSAPrivateKey, even for a CRT PKCS#8
+        // file. Recover the PUBLIC exponent from our existing local encoding;
+        // keep native JCA signing and never regenerate/export the private key.
+        org.bouncycastle.asn1.pkcs.RSAPrivateKey parameters = org.bouncycastle.asn1.pkcs.RSAPrivateKey.getInstance(
+            org.bouncycastle.asn1.pkcs.PrivateKeyInfo.getInstance(encoded).parsePrivateKey());
+        if (!(key instanceof RSAKey) || parameters.getModulus().bitLength() != 2048
+            || !((RSAKey) key).getModulus().equals(parameters.getModulus())) {
+            throw new SecurityException("Unexpected RSA key");
+        }
+        PublicKey pub = KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(parameters.getModulus(), parameters.getPublicExponent()));
         return new KeyPair(pub, key);
     }
 

@@ -1,7 +1,19 @@
 # Client integration status — 2026-09-26
 
 Branch `fix/azsign-client-integration`, based on Gemini's `073b6594c`.
-No production deployment or APK installation performed.
+## Physical DC400 validation — 2026-09-26
+
+APK v19 installed on DC400. Initial enrollment failed because Conscrypt returns
+OpenSSLRSAPrivateKey, which does not implement RSAPrivateCrtKey. Reproduced with
+the actual release classes on Android and a failing JVM non-CRT regression test.
+The loader now reconstructs the public component from the existing local PKCS#8
+encoding, retaining native JCA signing and the same private key. Identity tests,
+provider compilation and renewal suites pass with BC 1.86. A diagnostic DEX
+running as the app UID on the DC400 successfully generated the CSR with the fix;
+this is not yet validation of the complete corrected APK. v20 build required.
+Production identity: 01a0df4a-8aab-714b-9aa3-dc56d0a12c77, bound to the existing
+DC400 player. No private key exported. Reboot/renewal/block-release end-to-end
+tests remain pending. Earlier local-only notes below are historical.
 
 ## Security corrections implemented
 
