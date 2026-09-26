@@ -75,10 +75,6 @@ fn parse_target(target: &str) -> ResultType<(&str, Option<u16>)> {
     Ok((target.trim_start_matches('[').trim_end_matches(']'), None))
 }
 
-fn is_loopback(host: &str) -> bool {
-    host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "0.0.0.0"
-}
-
 fn directory() -> ResultType<PathBuf> {
     #[cfg(target_os = "android")]
     return Ok(PathBuf::from("/data/data/com.carriez.flutter_hbb/files/azsign-access-poc"));
@@ -121,17 +117,8 @@ pub async fn connect(service: &str, milliseconds: u64) -> ResultType<FramedStrea
 pub async fn tcp(target: &str, milliseconds: u64) -> ResultType<crate::Stream> {
     let (host, port) = parse_target(target)?;
 
-    // Preserve local loopback connections for internal application use without mTLS.
-    if is_loopback(host) {
-        let stream = crate::timeout(milliseconds, async {
-            let socket = TcpStream::connect(target).await?;
-            socket.set_nodelay(true)?;
-            let local = socket.local_addr()?;
-            Ok(FramedStream::from(socket, local))
-        }).await??;
-        return Ok(crate::Stream::Tcp(stream));
-    }
-
+    // IPC uses parity_tokio_ipc, not this remote transport. Even loopback must
+    // match the enrolled gateway and traverse TLS; no arbitrary local relay.
     let dir = directory()?;
     let profile = load_profile(&dir)?;
     if host != profile.host && host != profile.server_name {

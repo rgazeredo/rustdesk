@@ -39,6 +39,10 @@ public final class AzsignRenewalScheduler {
         public RevokedException(String message) { super(message); }
     }
 
+    public static class BlockedException extends Exception {
+        public BlockedException(String message) { super(message); }
+    }
+
     public interface RenewalTransport {
         /**
          * Requests a single-use renewal challenge from CMS for the identity.
@@ -48,9 +52,10 @@ public final class AzsignRenewalScheduler {
         /**
          * Submits CSR and challenge proof to CMS.
          * Returns renewed certificate (DER), CA certificate (DER), and updated profile (JSON).
-         * Must throw RevokedException if identity or player is revoked / blocked.
+         * Revocation is permanent; temporary blocks MUST NOT be mapped to revocation.
+         * Throw BlockedException for a temporary block (preserve enrollment and retry).
          */
-        RenewalPayload submitRenewal(String identityId, byte[] csrDer, String challengeProof) throws Exception;
+        RenewalPayload submitRenewal(String identityId, byte[] csrDer, String challenge, String challengeProof) throws Exception;
     }
 
     public static final class RenewalPayload {
@@ -236,13 +241,25 @@ public final class AzsignRenewalScheduler {
         byte[] csrDer = identity.prepare(identityId);
 
         // 3. Submit renewal
-        RenewalPayload payload = transport.submitRenewal(identityId, csrDer, challenge);
+        String proof = identity.signRenewal(identityId, challenge, csrDer);
+        RenewalPayload payload = transport.submitRenewal(identityId, csrDer, challenge, proof);
 
         // 4. Verify certificate strictly against identity and CA
-        X509Certificate renewedLeaf = identity.verifyCertificate(identityId, payload.certificate, payload.ca);
+        byte[] enrolledCa = Base64.getDecoder().decode(active.getString("ca_base64"));
+        if (!java.security.MessageDigest.isEqual(enrolledCa, payload.ca)) {
+            throw new SecurityException("Renewal cannot replace the enrolled authority");
+        }
+        if (!active.getJSONObject("profile").similar(payload.profile)) {
+            throw new SecurityException("Renewal cannot replace the enrolled gateway profile");
+        }
+        X509Certificate renewedLeaf = identity.verifyCertificate(identityId, payload.certificate, enrolledCa);
+        X509Certificate previousLeaf = parseCertificate(Base64.getDecoder().decode(active.getString("certificate_base64")));
+        if (!renewedLeaf.getNotAfter().after(previousLeaf.getNotAfter())) {
+            throw new SecurityException("Renewal must extend certificate validity");
+        }
 
         // 5. Atomic persist
-        JSONObject newActive = new JSONObject();
+        JSONObject newActive = new JSONObject(active.toString());
         newActive.put("identity_id", identityId);
         newActive.put("profile", payload.profile);
         newActive.put("certificate_base64", Base64.getEncoder().encodeToString(payload.certificate));

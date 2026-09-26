@@ -64,6 +64,27 @@ public final class AzsignAccessIdentity {
         return new KeyPair(pub, key);
     }
 
+    /** Canonical proof: UTF-8, four LF-separated fields, no trailing LF. */
+    public static byte[] renewalMessage(String id, String challenge, byte[] csr) throws Exception {
+        identityId(id);
+        if (challenge == null || !challenge.matches("[A-Za-z0-9_-]{16,256}")) {
+            throw new SecurityException("Invalid renewal challenge");
+        }
+        if (csr == null || csr.length == 0 || csr.length > 16384) throw new SecurityException("Invalid CSR");
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(csr);
+        StringBuilder hex = new StringBuilder();
+        for (byte b : digest) hex.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
+        return ("AZSIGN-RUSTDESK-RENEWAL-V1\n" + id + "\n" + challenge + "\n" + hex)
+            .getBytes(StandardCharsets.UTF_8);
+    }
+
+    public synchronized String signRenewal(String id, String challenge, byte[] csr) throws Exception {
+        Signature signer = Signature.getInstance("SHA256withRSA");
+        signer.initSign(load(id).getPrivate());
+        signer.update(renewalMessage(id, challenge, csr));
+        return java.util.Base64.getEncoder().encodeToString(signer.sign());
+    }
+
     public X509Certificate verifyCertificate(String id, byte[] certificate, byte[] authority) throws Exception {
         KeyPair pair = load(id);
         CertificateFactory factory = CertificateFactory.getInstance("X.509");
