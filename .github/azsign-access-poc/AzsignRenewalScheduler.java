@@ -282,7 +282,19 @@ public final class AzsignRenewalScheduler {
             throw new SecurityException("Renewal cannot replace the enrolled gateway profile");
         }
         X509Certificate renewedLeaf = identity.verifyCertificate(identityId, payload.certificate, enrolledCa);
-        X509Certificate previousLeaf = parseCertificate(Base64.getDecoder().decode(active.getString("certificate_base64")));
+        byte[] previousCertificate = Base64.getDecoder().decode(active.getString("certificate_base64"));
+        X509Certificate previousLeaf = parseCertificate(previousCertificate);
+        if (java.security.MessageDigest.isEqual(previousCertificate, payload.certificate)) {
+            synchronized (this) {
+                if (attempt != generation || Thread.currentThread().isInterrupted()
+                    || !java.util.Arrays.equals(bytes, AzsignAccessIdentity.readLimited(activeFile, 32768))) {
+                    throw new InterruptedIOException("Enrollment changed during renewal");
+                }
+                consecutiveFailures = 0;
+                state.set(State.SCHEDULED);
+                return false; // CMS may return the current certificate before its renewal window.
+            }
+        }
         if (!renewedLeaf.getNotAfter().after(previousLeaf.getNotAfter())) {
             throw new SecurityException("Renewal must extend certificate validity");
         }
@@ -322,9 +334,10 @@ public final class AzsignRenewalScheduler {
         }
 
         try {
-            performRenewalNow();
+            boolean changed = performRenewalNow();
             // Reschedule next regular renewal based on the new certificate
-            evaluateAndSchedule();
+            if (changed) evaluateAndSchedule();
+            else scheduleExecution(60_000L); // Clock skew must not create a busy renewal loop.
         } catch (RevokedException revoked) {
             synchronized (this) { if (attempt == generation) handleRevoked(); }
         } catch (ReenrollmentException required) {

@@ -87,7 +87,9 @@ const res1 = java('test-success', dir, id, join(work, 'renewed_client.der'), joi
 assert.equal(res1.trim(), 'success-verified');
 console.log('✓ Autonomous renewal succeeded: key retained, active.json atomically updated, transport authorized');
 
-for (const scenario of ['test-profile-change', 'test-ca-change', 'test-replay']) {
+assert.equal(java('test-idempotent', dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der')).trim(), 'idempotent-verified');
+assert.equal(java('test-replay', dir, id, join(work, 'initial_client.der'), join(work, 'ca.der')).trim(), 'rejected-verified');
+for (const scenario of ['test-profile-change', 'test-ca-change']) {
   assert.equal(java(scenario, dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der')).trim(), 'rejected-verified');
 }
 console.log('✓ Renewal rejects authority/profile replacement and certificate replay without modifying enrollment');

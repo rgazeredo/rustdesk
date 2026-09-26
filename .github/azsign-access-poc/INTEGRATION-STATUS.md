@@ -44,7 +44,15 @@ No production deployment or APK installation performed.
 
 ## Not finished / not safe to publish as complete
 
-- CMS renewal challenge/issuance endpoints and one-time replay protection.
+- CMS renewal endpoints from Claude integrated locally in AZSign branch
+  `feat/rustdesk-gateway-lifecycle` (merge `0254e319`): 164 focused CMS tests,
+  683 assertions passed, including a real Java-generated signature vector.
+  Still no live HTTPS client-to-CMS or physical-device homologation.
+- Android accepts an exactly identical, valid certificate as an idempotent CMS
+  response without rewriting enrollment. A different non-extending certificate
+  remains rejected; unchanged responses wait at least 60 seconds before retry.
+- Pre-publication reviews remain: exact CN-only subject for original enrollment,
+  production-mode renewal tests, and trusted proxy/rate-limit deployment behavior.
 - Android device reboot/offline integration tests against the real CMS and a
   complete native APK build (JVM/API compilation is not an APK build).
 - Desktop native secure storage, real HTTP adapters, operator key/certificate
