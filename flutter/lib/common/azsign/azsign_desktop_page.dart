@@ -60,7 +60,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     } catch (_) {
       if (mounted) {
         setState(() => _error =
-            'Não foi possível validar a sessão. Confira sua conexão e o Keychain.');
+            'Não foi possível validar a sessão. Confira a conexão e o armazenamento seguro do sistema.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -107,7 +107,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     } catch (_) {
       if (mounted && generation == _generation) {
         setState(() => _error =
-            'Login não concluído. Verifique o navegador, a conexão e o Keychain.');
+            'Login não concluído. Verifique o navegador, a conexão e o armazenamento seguro do sistema.');
       }
     } finally {
       if (mounted && generation == _generation) {
