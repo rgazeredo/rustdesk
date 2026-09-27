@@ -19,6 +19,38 @@ struct Enrollment {
     expires_at: Option<u64>,
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[derive(Deserialize)]
+struct DesktopEnrollment {
+    #[serde(flatten)]
+    enrollment: Enrollment,
+    active: bool,
+    private_pkcs8: String,
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn desktop_enrollment() -> ResultType<DesktopEnrollment> {
+    #[cfg(target_os = "macos")]
+    let bytes = security_framework::passwords::get_generic_password(
+        "com.azsign.rustdesk.desktop", "azsign_desktop_enrollment")?;
+    #[cfg(target_os = "windows")]
+    let bytes = crate::azsign_windows::enrollment_bytes()?;
+    parse_desktop_enrollment(&bytes)
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn parse_desktop_enrollment(bytes: &[u8]) -> ResultType<DesktopEnrollment> {
+    if bytes.len() > 32768 { bail!("Desktop enrollment oversized"); }
+    let record: DesktopEnrollment = serde_json::from_slice(bytes)?;
+    uuid::Uuid::parse_str(&record.enrollment.identity_id)?;
+    let expiry = record.enrollment.expires_at.context("Desktop enrollment expiry required")?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_millis();
+    if !record.active || now >= u128::from(expiry) {
+        bail!("Desktop enrollment inactive or expired");
+    }
+    Ok(record)
+}
+
 fn credentials(dir: &std::path::Path) -> ResultType<(Profile, Vec<u8>, Vec<u8>, Vec<u8>)> {
     #[cfg(target_os = "android")]
     {
@@ -41,7 +73,13 @@ fn credentials(dir: &std::path::Path) -> ResultType<(Profile, Vec<u8>, Vec<u8>, 
         Ok((active.profile, STANDARD.decode(active.ca_base64)?, STANDARD.decode(active.certificate_base64)?,
             std::fs::read(dir.join("identity/key.der"))?))
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        let record = desktop_enrollment()?;
+        Ok((record.enrollment.profile, STANDARD.decode(record.enrollment.ca_base64)?,
+            STANDARD.decode(record.enrollment.certificate_base64)?, STANDARD.decode(record.private_pkcs8)?))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "macos", target_os = "windows")))]
     {
         // Existing local desktop harness until native operator enrollment is integrated.
         Ok((serde_json::from_slice(&std::fs::read(dir.join("profile.json"))?)?,
@@ -59,7 +97,9 @@ fn load_profile(dir: &std::path::Path) -> ResultType<Profile> {
         uuid::Uuid::parse_str(&active.identity_id)?;
         Ok(active.profile)
     }
-    #[cfg(not(target_os = "android"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    { Ok(desktop_enrollment()?.enrollment.profile) }
+    #[cfg(not(any(target_os = "android", target_os = "macos", target_os = "windows")))]
     {
         Ok(serde_json::from_slice(&std::fs::read(dir.join("profile.json"))?)?)
     }
@@ -78,7 +118,9 @@ fn parse_target(target: &str) -> ResultType<(&str, Option<u16>)> {
 fn directory() -> ResultType<PathBuf> {
     #[cfg(target_os = "android")]
     return Ok(PathBuf::from("/data/data/com.carriez.flutter_hbb/files/azsign-access-poc"));
-    #[cfg(not(target_os = "android"))]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    return Ok(PathBuf::new()); // macOS credentials are Keychain-only; this path is never read.
+    #[cfg(not(any(target_os = "android", target_os = "macos", target_os = "windows")))]
     Ok(std::env::var_os("AZSIGN_ACCESS_POC_DIR").context("PoC profile required")?.into())
 }
 
@@ -120,7 +162,7 @@ pub async fn tcp(target: &str, milliseconds: u64) -> ResultType<crate::Stream> {
     // IPC uses parity_tokio_ipc, not this remote transport. Even loopback must
     // match the enrolled gateway and traverse TLS; no arbitrary local relay.
     let dir = directory()?;
-    let profile = load_profile(&dir)?;
+    let profile = tokio::task::spawn_blocking(move || load_profile(&dir)).await??;
     if host != profile.host && host != profile.server_name {
         bail!("PoC forbids direct/public TCP targets: {}", target);
     }
@@ -138,7 +180,7 @@ pub async fn tcp(target: &str, milliseconds: u64) -> ResultType<crate::Stream> {
 pub async fn udp(target: &str, milliseconds: u64) -> ResultType<(crate::udp::FramedSocket, crate::TargetAddr<'static>)> {
     let (host, port) = parse_target(target)?;
     let dir = directory()?;
-    let profile = load_profile(&dir)?;
+    let profile = tokio::task::spawn_blocking(move || load_profile(&dir)).await??;
 
     if host != profile.host && host != profile.server_name {
         bail!("PoC forbids direct/public UDP targets: {}", target);
@@ -154,4 +196,32 @@ pub async fn udp(target: &str, milliseconds: u64) -> ResultType<(crate::udp::Fra
     let addr = target.into_target_addr()?.to_owned();
     let stream = connect("registration", milliseconds).await?;
     Ok((crate::udp::FramedSocket::AzsignAccess(stream, addr.clone()), addr))
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod desktop_tests {
+    use super::*;
+
+    #[test]
+    fn desktop_record_requires_active_identity_and_absolute_future_expiry() {
+        let mut record = serde_json::json!({
+            "identity_id": "01a0df99-c0f2-72fe-9f31-58742f0c8555",
+            "profile": {"host": "gateway.example", "server_name": "gateway.example", "registration": 32116, "rendezvous": 32117, "relay": 32118},
+            "active": true, "private_pkcs8": "", "certificate_base64": "", "ca_base64": "",
+            "expires_at": 4102444800000u64
+        });
+        let parse = |value: &serde_json::Value| parse_desktop_enrollment(value.to_string().as_bytes());
+        assert!(parse(&record).is_ok());
+        record["expires_at"] = 1.into();
+        assert!(parse(&record).is_err());
+        record["expires_at"] = serde_json::Value::Null;
+        assert!(parse(&record).is_err());
+        record["expires_at"] = 4102444800000u64.into();
+        record["active"] = false.into();
+        assert!(parse(&record).is_err());
+        record["active"] = true.into();
+        record["identity_id"] = "invalid".into();
+        assert!(parse(&record).is_err());
+        assert!(parse_desktop_enrollment(&vec![0; 32769]).is_err());
+    }
 }

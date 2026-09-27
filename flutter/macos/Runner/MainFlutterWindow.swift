@@ -203,6 +203,61 @@ class MainFlutterWindow: NSWindow {
         channel.setMethodCallHandler({
             (call, result) -> Void in
                 switch call.method {
+                case "azsignNativeTransportAvailable":
+                    if let handle = dlopen(nil, RTLD_NOW), let symbol = dlsym(handle, "azsign_native_access_enabled") {
+                        let probe = unsafeBitCast(symbol, to: (@convention(c) () -> Int32).self)
+                        result(probe() == 1)
+                        dlclose(handle)
+                    } else {
+                        result(false)
+                    }
+                case "azsignIdentityPrepare", "azsignIdentityInstall", "azsignIdentityClear":
+                    let args = call.arguments as? [String: Any] ?? [:]
+                    AzsignIdentity.queue.async {
+                        do {
+                            var value: Any? = nil
+                            if call.method == "azsignIdentityClear" {
+                                defer {
+                                    if let handle = dlopen(nil, RTLD_NOW) {
+                                        defer { dlclose(handle) }
+                                        if let symbol = dlsym(handle, "azsign_native_access_logout") {
+                                            unsafeBitCast(symbol, to: (@convention(c) () -> Void).self)()
+                                        }
+                                    }
+                                }
+                                try AzsignIdentity.clear()
+                            } else if call.method == "azsignIdentityPrepare" {
+                                guard let identity = args["identity_id"] as? String else { throw AzsignIdentity.fail() }
+                                value = try AzsignIdentity.prepare(identity)
+                            } else {
+                                value = try AzsignIdentity.install(args)
+                            }
+                            DispatchQueue.main.async { result(value) }
+                        } catch {
+                            DispatchQueue.main.async {
+                                result(FlutterError(code: "enrollment_failed", message: "Identidade local indisponível ou certificado inválido.", details: nil))
+                            }
+                        }
+                    }
+                case "azsignSecureRead", "azsignSecureWrite", "azsignSecureDelete":
+                    guard let args = call.arguments as? [String: Any], let key = args["key"] as? String else {
+                        result(FlutterError(code: "invalid_argument", message: "Chave ausente", details: nil))
+                        return
+                    }
+                    do {
+                        if call.method == "azsignSecureRead" {
+                            result(try AzsignKeychain.read(key))
+                        } else if call.method == "azsignSecureDelete" {
+                            try AzsignKeychain.delete(key)
+                            result(nil)
+                        } else {
+                            guard let value = args["value"] as? String else { throw AzsignKeychain.failure(-50) }
+                            try AzsignKeychain.write(key, value: value)
+                            result(nil)
+                        }
+                    } catch {
+                        result(FlutterError(code: "secure_storage_unavailable", message: error.localizedDescription, details: nil))
+                    }
                 case "setWindowTheme":
                     let arg = call.arguments as! [String: Any]
                     let themeName = arg["themeName"] as? String

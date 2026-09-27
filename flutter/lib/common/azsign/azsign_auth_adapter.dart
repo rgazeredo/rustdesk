@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'azsign_types.dart';
+import 'azsign_auth_transport.dart';
+export 'azsign_auth_transport.dart';
 
 /// Exception thrown when native OS secure storage (Keychain / DPAPI) is unavailable.
 /// We strictly forbid silent fallback to plaintext files.
@@ -56,62 +58,6 @@ class AzsignPkce {
   }
 }
 
-class AzsignAuthorizationRequest {
-  final String deviceCode;
-  final String userCode;
-  final String verificationUri;
-  final int expiresIn;
-  final int interval;
-
-  const AzsignAuthorizationRequest({
-    required this.deviceCode,
-    required this.userCode,
-    required this.verificationUri,
-    required this.expiresIn,
-    this.interval = 3,
-  });
-}
-
-enum TokenPollStatus {
-  pending,
-  slowDown,
-  expired,
-  denied,
-  approved,
-}
-
-class AzsignTokenPollResult {
-  final TokenPollStatus status;
-  final AzsignSession? session;
-  final String? errorMessage;
-
-  const AzsignTokenPollResult({
-    required this.status,
-    this.session,
-    this.errorMessage,
-  });
-}
-
-/// Transport interface for desktop browser authorization (device code + PKCE).
-/// Decouples the UI and state management from the concrete HTTP endpoints.
-abstract class AzsignAuthTransport {
-  Future<AzsignAuthorizationRequest> requestAuthorization({
-    required String codeChallenge,
-    required String deviceId,
-    required String deviceLabel,
-    String? clientVersion,
-  });
-
-  Future<AzsignTokenPollResult> pollToken({
-    required String deviceCode,
-    required String codeVerifier,
-  });
-
-  Future<AzsignSession?> fetchSession(String token);
-
-  Future<void> revokeSession(String token);
-}
-
 /// Desktop authentication service managing login lifecycle, PKCE, secure storage,
 /// and single-use device code polling without receiving user passwords in the app.
 class AzsignAuthService {
@@ -129,6 +75,19 @@ class AzsignAuthService {
   String? _pendingDeviceCode;
   String? _pendingVerifier;
   DateTime? _pendingExpiresAt;
+  int _generation = 0;
+  Future<void> _storageQueue = Future<void>.value();
+
+  void cancelLogin() {
+    _generation++;
+    _clearPending();
+  }
+
+  Future<void> _serializeStorage(Future<void> Function() action) {
+    final operation = _storageQueue.then((_) => action());
+    _storageQueue = operation.catchError((Object _) {});
+    return operation;
+  }
 
   /// Ensures a stable, random RFC 4122 v4 UUID is generated per desktop installation.
   Future<String> getOrCreateDeviceId() async {
@@ -147,6 +106,8 @@ class AzsignAuthService {
     String? deviceLabel,
     String? clientVersion,
   }) async {
+    final generation = ++_generation;
+    _clearPending();
     final deviceId = await getOrCreateDeviceId();
     final pkce = AzsignPkce.generate();
 
@@ -156,6 +117,7 @@ class AzsignAuthService {
       deviceLabel: deviceLabel ?? 'AZSign Desktop Operator',
       clientVersion: clientVersion,
     );
+    if (generation != _generation) throw StateError('Login cancelado.');
 
     _pendingDeviceCode = authRequest.deviceCode;
     _pendingVerifier = pkce.verifier;
@@ -171,6 +133,7 @@ class AzsignAuthService {
 
   /// Single attempt to exchange pending device code for bearer token.
   Future<AzsignTokenPollResult> pollLogin() async {
+    final generation = _generation;
     final deviceCode = _pendingDeviceCode;
     final verifier = _pendingVerifier;
     final expiresAt = _pendingExpiresAt;
@@ -195,8 +158,19 @@ class AzsignAuthService {
       codeVerifier: verifier,
     );
 
+    if (generation != _generation) {
+      if (result.session != null) {
+        await transport.revokeSession(result.session!.token);
+      }
+      return const AzsignTokenPollResult(status: TokenPollStatus.expired);
+    }
+
     if (result.status == TokenPollStatus.approved && result.session != null) {
-      await secureStorage.write(_kTokenKey, result.session!.token);
+      await _serializeStorage(() async {
+        if (generation == _generation) {
+          await secureStorage.write(_kTokenKey, result.session!.token);
+        }
+      });
       _clearPending();
     } else if (result.status == TokenPollStatus.expired || result.status == TokenPollStatus.denied) {
       _clearPending();
@@ -210,32 +184,31 @@ class AzsignAuthService {
     final token = await secureStorage.read(_kTokenKey);
     if (token == null || token.isEmpty) return null;
 
-    try {
-      final session = await transport.fetchSession(token);
-      if (session == null || session.isExpired) {
-        await secureStorage.delete(_kTokenKey);
-        return null;
-      }
-      return session;
-    } catch (_) {
-      // On network error or rejection, do not trust invalid token
+    // A network failure is not revocation. Propagate it and keep the stored
+    // credential, while returning no authenticated session to the caller.
+    final session = await transport.fetchSession(token);
+    if (session == null || session.isExpired) {
       await secureStorage.delete(_kTokenKey);
       return null;
     }
+    return session;
   }
 
   /// Clean logout: revokes token on CMS and removes from secure storage.
   Future<void> logout() async {
+    cancelLogin();
     final token = await secureStorage.read(_kTokenKey);
+    Object? revokeError;
     if (token != null && token.isNotEmpty) {
       try {
         await transport.revokeSession(token);
-      } catch (_) {
-        // Continue clearing local storage even if network revoke fails
+      } catch (error) {
+        revokeError = error;
       }
-      await secureStorage.delete(_kTokenKey);
+      await _serializeStorage(() => secureStorage.delete(_kTokenKey));
     }
     _clearPending();
+    if (revokeError != null) throw StateError('Saída local concluída, mas a revogação no CMS não foi confirmada.');
   }
 
   void _clearPending() {

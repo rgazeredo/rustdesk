@@ -1142,6 +1142,8 @@ fn get_direct_port() -> i32 {
 }
 
 async fn direct_server(server: ServerPtr) {
+    #[cfg(feature = "azsign-access-poc")]
+    return;
     let mut listener = None;
     let mut port = 0;
     loop {

@@ -33,6 +33,9 @@ pub fn core_main() -> Option<Vec<String>> {
     if !crate::common::global_init() {
         return None;
     }
+    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]
+    { *config::APP_NAME.write().ok()? = "AZSignRemotePilot".to_owned(); }
+    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]
     crate::load_custom_client();
     #[cfg(windows)]
     if !crate::platform::windows::bootstrap() {

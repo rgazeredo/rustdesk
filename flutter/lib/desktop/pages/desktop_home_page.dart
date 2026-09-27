@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import '../../common/azsign/azsign_desktop_page.dart';
 
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
@@ -179,6 +180,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildRightPane(BuildContext context) {
+    const cmsOrigin = String.fromEnvironment('AZSIGN_DESKTOP_CMS_ORIGIN');
+    if ((Platform.isMacOS || Platform.isWindows) && cmsOrigin.isNotEmpty) {
+      return AzsignDesktopPage(cmsOrigin: cmsOrigin, onConnect: (enrollment, remoteId) async {
+        final profile = enrollment['profile'] as Map<String, dynamic>;
+        // The Rust feature uses a separate AZSignRemotePilot config directory.
+        // Its socket layer always uses mTLS; no SOCKS process is involved.
+        await bind.mainSetSocks(proxy: '', username: '', password: '');
+        await bind.mainSetOption(key: 'custom-rendezvous-server', value: '${profile['host']}:21116');
+        await bind.mainSetOption(key: 'relay-server', value: '${profile['host']}:21117');
+        await bind.mainSetOption(key: 'key', value: enrollment['server_public_key'] as String);
+        if (!mounted) return;
+        await connect(context, remoteId, forceRelay: true);
+      });
+    }
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: ConnectionPage(),

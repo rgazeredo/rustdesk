@@ -5,10 +5,13 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = RustDesk
+AZSIGN_PRODUCT_NAME = RustDesk
+PRODUCT_NAME = $(AZSIGN_PRODUCT_NAME)
 
 // The application's bundle identifier
 PRODUCT_BUNDLE_IDENTIFIER = com.carriez.flutterHbb
+AZSIGN_BUNDLE_IDENTIFIER = com.carriez.rustdesk
+RUSTDESK_URL_SCHEME = rustdesk
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Purslane Tech Pte. Ltd. All rights reserved.

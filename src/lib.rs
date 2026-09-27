@@ -1,6 +1,11 @@
 #[cfg(any(test, not(target_os = "linux")))]
 mod audio_resampler;
+#[cfg(all(windows, feature = "azsign-access-poc", feature = "flutter"))]
+mod azsign_windows_ffi;
 mod keyboard;
+#[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]
+#[no_mangle]
+pub extern "C" fn azsign_native_access_enabled() -> i32 { 1 }
 /// cbindgen:ignore
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -48,6 +53,9 @@ mod lang;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 mod port_forward_mux;
+#[cfg(all(target_os = "macos", feature = "azsign-access-poc", feature = "flutter"))]
+#[no_mangle]
+pub extern "C" fn azsign_native_access_logout() { crate::flutter::sessions::close_all_sessions(); }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod tray;

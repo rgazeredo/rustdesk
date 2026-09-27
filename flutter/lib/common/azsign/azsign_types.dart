@@ -7,6 +7,8 @@ enum PlayerHeartbeatStatus {
 }
 
 enum RemoteTransportStatus {
+  unknown,
+  blocked,
   /// mTLS identity active and verified on gateway
   available,
   /// mTLS provisioned but gateway reports offline / unreachable
@@ -80,11 +82,10 @@ class AzsignSession {
 
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
-  factory AzsignSession.fromJson(Map<String, dynamic> json) {
-    final expiresIn = json['expires_in'] as int? ?? 86400;
+  factory AzsignSession.fromJson(Map<String, dynamic> json, {String? existingToken}) {
     return AzsignSession(
-      token: json['access_token'] as String,
-      expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+      token: json['access_token'] as String? ?? existingToken ?? (throw const FormatException('Missing session token')),
+      expiresAt: DateTime.parse(json['expires_at'] as String).toUtc(),
       user: AzsignUser.fromJson(json['user'] as Map<String, dynamic>),
       tenant: AzsignTenant.fromJson(json['tenant'] as Map<String, dynamic>),
     );
@@ -92,6 +93,7 @@ class AzsignSession {
 }
 
 class AddressBookDevice {
+  final String? remoteId;
   final String id;
   final String name;
   final String tenantId;
@@ -102,6 +104,7 @@ class AddressBookDevice {
   final List<String> tags;
 
   const AddressBookDevice({
+    this.remoteId,
     required this.id,
     required this.name,
     required this.tenantId,
@@ -117,6 +120,7 @@ class AddressBookDevice {
     final remoteStatusStr = json['remote_access_status'] as String? ?? 'unprovisioned';
 
     return AddressBookDevice(
+      remoteId: json['remote_id'] as String?,
       id: json['id'] as String,
       name: json['name'] as String,
       tenantId: json['tenant_id'] as String,
@@ -134,6 +138,8 @@ class AddressBookDevice {
 
   static RemoteTransportStatus _parseRemoteStatus(String status) {
     switch (status) {
+      case 'blocked':
+        return RemoteTransportStatus.blocked;
       case 'available':
         return RemoteTransportStatus.available;
       case 'offline':
@@ -141,12 +147,14 @@ class AddressBookDevice {
       case 'revoked':
         return RemoteTransportStatus.revoked;
       case 'unprovisioned':
-      default:
         return RemoteTransportStatus.unprovisioned;
+      default:
+        return RemoteTransportStatus.unknown;
     }
   }
 
   Map<String, dynamic> toJson() => {
+    'remote_id': remoteId,
     'id': id,
     'name': name,
     'tenant_id': tenantId,

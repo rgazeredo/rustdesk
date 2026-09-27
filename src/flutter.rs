@@ -2096,7 +2096,7 @@ pub mod sessions {
     /// process alive. The orphaned `io_loop` would otherwise keep answering
     /// `TestDelay`, so the peer never hits its inactivity timeout and the
     /// session stays established with no way to close it.
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]
     pub fn close_all_sessions() -> usize {
         // Release held keys before draining: the release path sends through
         // `get_cur_session()`, which resolves against SESSIONS, so draining

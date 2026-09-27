@@ -1,0 +1,20 @@
+[package]
+name = "azsign-windows-native-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+path = "../azsign_windows.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+chrono = "0.4"
+dirs-next = "2"
+openssl = { version = "0.10", features = ["vendored"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+winapi = { version = "0.3", features = ["dpapi", "wincrypt", "winbase"] }

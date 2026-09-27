@@ -1,0 +1,90 @@
+name: AZSign Windows pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/azsign-desktop-windows]
+permissions:
+  contents: read
+concurrency:
+  group: azsign-windows-pilot-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+      CARGO_INCREMENTAL: '0'
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: azsign-windows-x64
+          workspaces: |
+            . -> target
+            .github/azsign-access-poc/windows-test -> target
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      - name: Apply authenticated transport
+        run: node .github/azsign-access-poc/apply.mjs . --desktop
+      - name: Test actual Windows DPAPI and enrollment implementation
+        run: cargo test --manifest-path .github/azsign-access-poc/windows-test/Cargo.toml --locked
+      - name: Patch Flutter SDK and resolve locked dependencies
+        shell: bash
+        run: |
+          SDK="$(dirname "$(dirname "$(which flutter)")")"
+          git -C "$SDK" apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          cd flutter
+          flutter pub get --enforce-lockfile
+      - name: Analyze AZSign desktop integration
+        working-directory: flutter
+        run: dart analyze lib/common/azsign/azsign_native_channel.dart lib/common/azsign/azsign_native_storage.dart lib/common/azsign/azsign_native_enrollment.dart
+      - name: Generate bridge
+        shell: bash
+        run: |
+          cargo install cargo-expand --version 1.0.95 --locked
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+      - name: Install native dependencies
+        shell: bash
+        run: "$VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root=\"$VCPKG_ROOT/installed\""
+      - name: Compile native authenticated client
+        run: cargo build --locked --release --lib --features flutter,azsign-access-poc
+      - name: Compile desktop
+        working-directory: flutter
+        run: flutter build windows --release --dart-define=AZSIGN_DESKTOP_CMS_ORIGIN=https://app.azsign.com.br
+      - name: Package portable pilot
+        shell: pwsh
+        run: |
+          $bundle = 'flutter/build/windows/x64/runner/Release'
+          if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
+          Copy-Item target/release/deps/dylib_virtual_display.dll $bundle
+          Copy-Item LICENSE "$bundle/LICENSE-RustDesk.txt"
+          Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
+          Rename-Item "$bundle/rustdesk.exe" 'AZSignRemotePilot.exe'
+          Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemotePilot-windows-x64.zip
+          (Get-FileHash AZSignRemotePilot-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemotePilot-windows-x64.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: AZSignRemotePilot-windows-x64
+          path: |
+            AZSignRemotePilot-windows-x64.zip
+            AZSignRemotePilot-windows-x64.sha256
+          if-no-files-found: error
+          retention-days: 14
