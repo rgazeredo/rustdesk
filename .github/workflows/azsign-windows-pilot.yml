@@ -51,6 +51,15 @@ jobs:
       - name: Analyze AZSign desktop integration
         working-directory: flutter
         run: dart analyze lib/common/azsign/azsign_native_channel.dart lib/common/azsign/azsign_native_storage.dart lib/common/azsign/azsign_native_enrollment.dart
+      - name: Install verified RustDesk Windows engine
+        shell: pwsh
+        run: |
+          flutter precache --windows
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile engine.zip
+          $hash = (Get-FileHash engine.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e') { throw 'Unexpected RustDesk engine checksum' }
+          Expand-Archive engine.zip -DestinationPath verified-engine
+          Copy-Item verified-engine/* "$env:FLUTTER_ROOT/bin/cache/artifacts/engine/windows-x64-release/" -Force
       - name: Generate bridge
         shell: bash
         run: |
