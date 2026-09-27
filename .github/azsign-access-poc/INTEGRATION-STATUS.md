@@ -132,3 +132,17 @@ tests remain pending. Earlier local-only notes below are historical.
 
 Local Java verification uses supplied BC jars (currently 1.79) and OpenSSL 3;
 the APK pipeline pins BC 1.86 and still requires its own build validation.
+# Windows desktop port — 2026-09-27
+
+Branch `feat/azsign-desktop-windows` isolates a snapshot of the working native
+macOS pilot. Windows enrollment uses RSA-2048/CSR in Rust and user-bound DPAPI
+records in LocalAppData/AZSignRemotePilot/SecureStore. No plaintext or laboratory
+credential fallback. TLS uses that same record. Logout deletes enrollment and
+closes local sessions; the CMS/gateway remains the authority for remote permits.
+
+Local verification: 7 Flutter regression tests and 15 assertions through real
+HTTPS sockets passed; the changed native-channel Dart files analyze cleanly.
+Windows DPAPI/CSR/certificate tests and the full executable build run in
+`azsign-windows-pilot.yml`; compilation is not a claim of interactive Windows
+homologation. The portable ZIP is unsigned. Production, gateway and Android
+were not changed for this port.
