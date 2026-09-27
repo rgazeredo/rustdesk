@@ -246,7 +246,8 @@ fn install(args: &Value) -> Result<Value> {
     store.add_cert(ca.clone())?;
     store.set_flags(X509VerifyFlags::PARTIAL_CHAIN)?;
     store.set_purpose(X509PurposeId::SSL_CLIENT)?;
-    if !X509StoreContext::new()?.init(&store.build(), &leaf, &Stack::new()?, |ctx| {
+    let chain = Stack::<X509>::new()?;
+    if !X509StoreContext::new()?.init(&store.build(), &leaf, &chain, |ctx| {
         ctx.verify_cert()
     })? {
         bail!("Untrusted or expired client certificate");
