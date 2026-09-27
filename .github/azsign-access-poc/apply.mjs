@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 const root = resolve(process.argv[2] ?? '.');
 function patch(file, old, value) {
   const path = join(root, file);
-  const source = readFileSync(path, 'utf8');
+  const source = readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
   if (source.includes(value)) return;
   if (source.split(old).length !== 2) throw new Error(`Unexpected patch target: ${file}`);
   writeFileSync(path, source.replace(old, () => value));
