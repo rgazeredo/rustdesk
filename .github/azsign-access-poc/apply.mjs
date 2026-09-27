@@ -11,6 +11,32 @@ patch('libs/hbb_common/Cargo.toml', 'default = []', 'default = []\nazsign-access
 patch('Cargo.toml', '[features]', '[features]\nazsign-access-poc = ["hbb_common/azsign-access-poc"]');
 patch('libs/hbb_common/src/lib.rs', 'pub mod socket_client;', '#[cfg(feature = "azsign-access-poc")]\npub mod azsign_access;\npub mod socket_client;');
 copyFileSync(join(import.meta.dirname, 'azsign_access.rs'), join(root, 'libs/hbb_common/src/azsign_access.rs'));
+copyFileSync(join(import.meta.dirname, 'azsign_scope.rs'), join(root, 'libs/hbb_common/src/azsign_scope.rs'));
+patch('libs/hbb_common/src/lib.rs', 'pub mod azsign_access;', 'pub mod azsign_access;\n#[cfg(feature = "azsign-access-poc")]\npub mod azsign_scope;');
+// Keep gateway scope local to the relay task; no shared ConnectionMeta/IPC changes.
+patch('src/server.rs', '    let licence_key = crate::get_key(true).await;\n    msg_out.set_request_relay', '    let licence_key = crate::get_key(true).await;\n    #[cfg(all(target_os = "android", feature = "azsign-access-poc"))]\n    let azsign_session_uuid = uuid.clone();\n    msg_out.set_request_relay');
+patch('src/server.rs', '    stream.send(&msg_out).await?;\n    create_tcp_connection(server, stream, peer_addr, secure, meta).await?;', '    stream.send(&msg_out).await?;\n    #[cfg(all(target_os = "android", feature = "azsign-access-poc"))]\n    {\n        let scope = hbb_common::azsign_scope::receive(&mut stream, &azsign_session_uuid).await?;\n        return hbb_common::azsign_scope::AUTHORIZED_SCOPE.scope(scope,\n            create_tcp_connection(server, stream, peer_addr, secure, meta)).await;\n    }\n    #[cfg(not(all(target_os = "android", feature = "azsign-access-poc")))]\n    create_tcp_connection(server, stream, peer_addr, secure, meta).await?;');
+patch('src/server/connection.rs', '    async fn on_message(&mut self, msg: Message) -> bool {', `    async fn on_message(&mut self, msg: Message) -> bool {
+        #[cfg(all(target_os = "android", feature = "azsign-access-poc"))]
+        {
+            let allowed = match msg.union.as_ref() {
+                Some(message::Union::LoginRequest(lr)) => {
+                    let kind = match lr.union.as_ref() {
+                        None => "remote",
+                        Some(login_request::Union::FileTransfer(_)) => "file_transfer",
+                        _ => "unsupported",
+                    };
+                    hbb_common::azsign_scope::allows_login(kind)
+                },
+                Some(message::Union::FileAction(_)) | Some(message::Union::FileResponse(_)) | Some(message::Union::Cliprdr(_)) => hbb_common::azsign_scope::allows_files(),
+                _ => true,
+            };
+            if !allowed {
+                self.send_login_error("Connection not allowed").await;
+                self.on_close("AZSign relay scope violation", true).await;
+                return false;
+            }
+        }`);
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<crate::Stream> {', ') -> ResultType<crate::Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<Stream> {', ') -> ResultType<Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::udp(target, ms_timeout).await;');

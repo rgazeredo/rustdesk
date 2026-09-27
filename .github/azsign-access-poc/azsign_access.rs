@@ -96,6 +96,8 @@ pub async fn connect(service: &str, milliseconds: u64) -> ResultType<FramedStrea
             .with_client_auth_cert(vec![certificate], key.into())?;
         config.resumption = rustls::client::Resumption::disabled();
         config.enable_early_data = false;
+        #[cfg(target_os = "android")]
+        { config.alpn_protocols = vec![b"azsign-relay-scope-v1".to_vec()]; }
         Ok((profile, config))
     }).await??;
     let port = match service {
@@ -110,6 +112,10 @@ pub async fn connect(service: &str, milliseconds: u64) -> ResultType<FramedStrea
         socket.set_nodelay(true)?;
         let local = socket.local_addr()?;
         let tls = TlsConnector::from(Arc::new(config)).connect(name, socket).await?;
+        #[cfg(target_os = "android")]
+        if service == "relay" && tls.get_ref().1.alpn_protocol() != Some(b"azsign-relay-scope-v1".as_slice()) {
+            bail!("Relay does not enforce session scopes");
+        }
         Ok(FramedStream::from(tls, local))
     }).await?
 }
