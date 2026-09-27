@@ -76,9 +76,18 @@ jobs:
           $bundle = 'flutter/build/windows/x64/runner/Release'
           if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
           Copy-Item target/release/deps/dylib_virtual_display.dll $bundle
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -property installationPath
+          $crt = Get-ChildItem "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$crt) { throw 'Missing x64 Visual C++ redistributable directory' }
+          Copy-Item "$($crt.FullName)/*.dll" $bundle
           Copy-Item LICENSE "$bundle/LICENSE-RustDesk.txt"
           Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
+          $env:GITHUB_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
           Rename-Item "$bundle/rustdesk.exe" 'AZSignRemotePilot.exe'
+          $probe = Start-Process -FilePath "$bundle/AZSignRemotePilot.exe" -ArgumentList '--version' -PassThru
+          if (!$probe.WaitForExit(30000)) { $probe.Kill(); throw 'Native loader smoke test timed out' }
+          if ($probe.ExitCode -ne 0) { throw "Native loader failed: $($probe.ExitCode)" }
           Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemotePilot-windows-x64.zip
           (Get-FileHash AZSignRemotePilot-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemotePilot-windows-x64.sha256
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
