@@ -8,7 +8,8 @@ import 'package:flutter/services.dart';
 // RSA generation runs off the UI isolate. Native operations are serialized by
 // a mutex shared with the Rust transport; private key bytes never enter Dart.
 String _windowsRequest(String request) {
-  final library = DynamicLibrary.open('librustdesk.dll');
+  final library = DynamicLibrary.open(
+      '${File(Platform.resolvedExecutable).parent.path}\\librustdesk.dll');
   final call = library.lookupFunction<Pointer<Utf8> Function(Pointer<Utf8>),
       Pointer<Utf8> Function(Pointer<Utf8>)>('azsign_windows_dispatch');
   final release = library.lookupFunction<Void Function(Pointer<Utf8>),
