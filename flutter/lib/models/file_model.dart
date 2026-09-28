@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/utils/event_loop.dart';
+import 'package:flutter_hbb/utils/initial_file_directory.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter_hbb/web/dummy.dart'
@@ -430,11 +431,19 @@ class FileController {
         sessionId: sessionId, name: "local_dir", value: savedDir);
     }
     Future<bool> tryOpenReadyDirs() async {
-      final dirs = <String>{
-        if (directory.value.path.isNotEmpty) directory.value.path,
-        if (savedDir.isNotEmpty) savedDir,
-        options.value.home,
-      };
+      final dirs = !isLocal &&
+              rootState.target?.ffiModel.pi.platform == kPeerPlatformAndroid
+          ? initialFileDirectories(
+              isRemoteAndroid: true,
+              current: directory.value.path,
+              saved: savedDir,
+              home: options.value.home,
+            )
+          : <String>{
+              if (directory.value.path.isNotEmpty) directory.value.path,
+              if (savedDir.isNotEmpty) savedDir,
+              options.value.home,
+            };
       for (final dir in dirs) {
         if (await _openDirectoryPath(dir, isBack: true)) {
           return true;

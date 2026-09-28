@@ -16,6 +16,27 @@ Homologar antes de distribuir: login, catálogo, conexão, envio/recebimento,
 bloqueio durante sessão, recusa de reconexão, liberação, logout e reinício.
 Uma compilação bem-sucedida não substitui estes testes interativos.
 
+Primeira transferência Android: mantém a pasta salva ou a pasta absoluta
+informada pelo aparelho. Sem uma pasta absoluta conhecida, tenta o alias Android
+`/sdcard`, sujeito às permissões do aparelho, antes da solicitação de Home vazia.
+Não fixa `/storage/emulated/0` nem modifica permissões. Homologar também num
+perfil Windows novo, sem pasta remota salva: reabrir com caminho salvo não
+comprova a primeira abertura.
+
+Antes da entrega, com controle e transferência abertos no Windows:
+- Bloquear somente o player de teste no painel superadmin. Confirmar queda dos
+  dois canais e recusa de novas conexões; conferir encerramentos no histórico.
+- Liberar e abrir novas sessões de controle e transferência; conferir o histórico.
+- Usar Sair no aplicativo com os dois canais abertos. Confirmar encerramento,
+  catálogo removido e impossibilidade de reconectar sem nova autorização.
+- Fechar/reabrir após logout, confirmar que não resta sessão autenticada, e
+  autorizar novamente para testar reconexão. Não compartilhar senhas ou tokens.
+
+Estado de homologação: o operador confirmou no Windows controle, teclado e
+envio/recebimento em 28/09/2026. Primeira abertura corrigida, bloqueio/liberação
+e logout na nova build ainda aguardam validação física; não distribuir como
+homologado até concluir esses passos.
+
 Baseado em RustDesk, sob AGPL-3.0. Código correspondente e instruções:
 https://github.com/rgazeredo/rustdesk/tree/feat/azsign-desktop-windows
 Consulte também LICENSE-RustDesk.txt distribuído neste pacote.
