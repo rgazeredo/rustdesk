@@ -141,17 +141,17 @@ jobs:
           Copy-Item LICENCE "$bundle/LICENSE-RustDesk.txt"
           Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
           $env:GITHUB_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
-          Rename-Item "$bundle/rustdesk.exe" 'AZSignRemotePilot.exe'
-          $probe = Start-Process -FilePath "$bundle/AZSignRemotePilot.exe" -ArgumentList '--version' -PassThru
+          Rename-Item "$bundle/rustdesk.exe" 'AZSign Remote.exe'
+          $probe = Start-Process -FilePath "$bundle/AZSign Remote.exe" -ArgumentList '--version' -PassThru
           if (!$probe.WaitForExit(30000)) { $probe.Kill(); throw 'Native loader smoke test timed out' }
           if ($probe.ExitCode -ne 0) { throw "Native loader failed: $($probe.ExitCode)" }
-          Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemotePilot-windows-x64.zip
-          (Get-FileHash AZSignRemotePilot-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemotePilot-windows-x64.sha256
+          Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemote-windows-x64.zip
+          (Get-FileHash AZSignRemote-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemote-windows-x64.sha256
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: AZSignRemotePilot-windows-x64
+          name: AZSignRemote-windows-x64
           path: |
-            AZSignRemotePilot-windows-x64.zip
-            AZSignRemotePilot-windows-x64.sha256
+            AZSignRemote-windows-x64.zip
+            AZSignRemote-windows-x64.sha256
           if-no-files-found: error
           retention-days: 14

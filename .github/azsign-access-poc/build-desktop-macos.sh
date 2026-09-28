@@ -26,14 +26,14 @@ nm -gU target/release/liblibrustdesk.dylib | grep ' _azsign_native_access_enable
   FLUTTER_XCODE_ARCHS=arm64 \
   FLUTTER_XCODE_ONLY_ACTIVE_ARCH=YES \
   FLUTTER_XCODE_MACOSX_DEPLOYMENT_TARGET=12.3 \
-  FLUTTER_XCODE_AZSIGN_PRODUCT_NAME=AZSignRemotePilot \
+  FLUTTER_XCODE_AZSIGN_PRODUCT_NAME="AZSign Remote" \
   FLUTTER_XCODE_AZSIGN_BUNDLE_IDENTIFIER=com.azsign.remote.pilot \
   FLUTTER_XCODE_RUSTDESK_URL_SCHEME=azsign-rustdesk-pilot \
   FLUTTER_XCODE_CODE_SIGNING_ALLOWED=NO \
   flutter --suppress-analytics build macos --release \
     --dart-define="AZSIGN_DESKTOP_CMS_ORIGIN=$cms_origin"
 )
-app=flutter/build/macos/Build/Products/Release/AZSignRemotePilot.app
+app="flutter/build/macos/Build/Products/Release/AZSign Remote.app"
 test -d "$app"
 codesign --force --deep --sign - --entitlements flutter/macos/Runner/Release.entitlements "$app"
 codesign --verify --deep --strict "$app"

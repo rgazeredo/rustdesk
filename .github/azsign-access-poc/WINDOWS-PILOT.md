@@ -1,6 +1,10 @@
-# AZSign Remote — piloto Windows x64
+# AZSign Remote — Windows x64
 
-Extraia o ZIP inteiro para uma pasta e abra `AZSignRemotePilot.exe`.
+Extraia o ZIP inteiro para uma pasta e abra `AZSign Remote.exe`.
+
+O catálogo permite buscar pelo nome em todas as páginas. Ao mudar a busca,
+os resultados voltam à primeira página; o botão de limpar restaura a lista.
+A troca do nome não muda os diretórios de dados, certificados ou credenciais.
 Não execute diretamente de dentro do ZIP nem copie apenas o executável.
 Não precisa instalar serviço, configurar proxy ou executar como administrador.
 
@@ -9,7 +13,7 @@ para acesso remoto no CMS. O catálogo respeita as permissões do usuário.
 O Windows protege token/chave privada com DPAPI do usuário atual; nunca copie
 o armazenamento local para outra máquina. Em outro computador, entre novamente.
 
-Build piloto sem assinatura Authenticode: o Windows pode exibir aviso de editor
+Build sem assinatura Authenticode: o Windows pode exibir aviso de editor
 desconhecido. Confira origem e SHA-256 antes de executar. Não desative antivírus.
 
 Homologar antes de distribuir: login, catálogo, conexão, envio/recebimento,

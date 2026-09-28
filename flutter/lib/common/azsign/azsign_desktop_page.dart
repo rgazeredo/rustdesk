@@ -11,9 +11,11 @@ import 'azsign_types.dart';
 /// Pilot entry point. Public configuration is applied only after native enrollment.
 class AzsignDesktopPage extends StatefulWidget {
   final String cmsOrigin;
+  final AzsignHttp Function(Uri)? httpFactory;
   final Future<void> Function(Map<String, dynamic> profile, String remoteId)?
       onConnect;
-  const AzsignDesktopPage({super.key, required this.cmsOrigin, this.onConnect});
+  const AzsignDesktopPage(
+      {super.key, required this.cmsOrigin, this.onConnect, this.httpFactory});
   @override
   State<AzsignDesktopPage> createState() => _AzsignDesktopPageState();
 }
@@ -29,11 +31,25 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
   String? _error;
   bool _busy = true;
   int _generation = 0;
+  int _catalogGeneration = 0;
+  final _search = TextEditingController();
+  Timer? _searchTimer;
+
+  void _searchChanged(String value) {
+    _searchTimer?.cancel();
+    _catalogGeneration++;
+    setState(() {
+      _page = null;
+      _error = null;
+      _busy = true;
+    });
+    _searchTimer = Timer(const Duration(milliseconds: 300), () => _load(1));
+  }
 
   @override
   void initState() {
     super.initState();
-    _http = AzsignHttp(Uri.parse(widget.cmsOrigin));
+    _http = (widget.httpFactory ?? AzsignHttp.new)(Uri.parse(widget.cmsOrigin));
     _enrollment = AzsignNativeEnrollment(_http);
     _auth = AzsignAuthService(
         transport: AzsignHttpAuthTransport(_http),
@@ -45,6 +61,8 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
 
   @override
   void dispose() {
+    _searchTimer?.cancel();
+    _search.dispose();
     _generation++;
     _auth.cancelLogin();
     _http.close();
@@ -123,25 +141,39 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     final session = _session;
     if (session == null) return;
     final generation = _generation;
+    final catalogGeneration = ++_catalogGeneration;
     setState(() {
       _busy = true;
       _page = null;
       _error = null;
     });
     try {
-      final page = await _catalog.loadPage(token: session.token, page: number);
-      if (mounted && generation == _generation) setState(() => _page = page);
+      final page = await _catalog.loadPage(
+          token: session.token,
+          page: number,
+          filter: AzsignAddressBookFilter(search: _search.text.trim()));
+      if (mounted &&
+          generation == _generation &&
+          catalogGeneration == _catalogGeneration) setState(() => _page = page);
     } catch (_) {
-      if (mounted && generation == _generation) {
+      if (mounted &&
+          generation == _generation &&
+          catalogGeneration == _catalogGeneration) {
         setState(() => _error =
             'Catálogo indisponível. Nenhum resultado antigo será usado.');
       }
     } finally {
-      if (mounted && generation == _generation) setState(() => _busy = false);
+      if (mounted &&
+          generation == _generation &&
+          catalogGeneration == _catalogGeneration)
+        setState(() => _busy = false);
     }
   }
 
   Future<void> _logout() async {
+    _searchTimer?.cancel();
+    _search.clear();
+    _catalogGeneration++;
     _generation++;
     setState(() {
       _session = null;
@@ -228,7 +260,31 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
           ] else ...[
             const SizedBox(height: 12),
             const Text(
-                'Piloto: o certificado local é validado antes de cada conexão. O gateway confirma a autorização.'),
+                'O certificado local é validado antes de cada conexão. O gateway confirma a autorização.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _search,
+              onChanged: _searchChanged,
+              onSubmitted: (_) {
+                _searchTimer?.cancel();
+                _load(1);
+              },
+              decoration: InputDecoration(
+                labelText: 'Buscar player pelo nome',
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Limpar busca',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _search.clear();
+                          _searchChanged('');
+                        },
+                      ),
+              ),
+            ),
             const SizedBox(height: 12),
             Expanded(
                 child: ListView(children: [
@@ -255,7 +311,9 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
                           child: const Text('Conectar'))),
                 ),
               if (!_busy && _page?.devices.isEmpty == true)
-                const Text('Nenhum dispositivo autorizado.'),
+                Text(_search.text.trim().isEmpty
+                    ? 'Nenhum dispositivo autorizado.'
+                    : 'Nenhum player encontrado para esta busca.'),
             ])),
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton(
