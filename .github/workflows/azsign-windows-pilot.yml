@@ -75,7 +75,18 @@ jobs:
         shell: bash
         run: "$VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root=\"$VCPKG_ROOT/installed\""
       - name: Compile native authenticated client
-        run: cargo build --locked --release --lib --features flutter,azsign-access-poc
+        # The virtual-display wrapper loads this workspace member dynamically;
+        # compiling only the root library does not produce its companion DLL.
+        run: cargo build --locked --release --lib -p rustdesk -p dylib_virtual_display --features rustdesk/flutter,rustdesk/azsign-access-poc
+      - name: Verify native build outputs
+        shell: pwsh
+        run: |
+          foreach ($dll in @('librustdesk.dll', 'dylib_virtual_display.dll')) {
+            $path = "target/release/$dll"
+            if (!(Test-Path $path -PathType Leaf) -or (Get-Item $path).Length -eq 0) {
+              throw "Missing native build output: $path"
+            }
+          }
       - name: Compile desktop
         working-directory: flutter
         run: flutter build windows --release --dart-define=AZSIGN_DESKTOP_CMS_ORIGIN=https://app.azsign.com.br
@@ -84,7 +95,7 @@ jobs:
         run: |
           $bundle = 'flutter/build/windows/x64/runner/Release'
           if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
-          Copy-Item target/release/deps/dylib_virtual_display.dll $bundle
+          Copy-Item target/release/dylib_virtual_display.dll $bundle
           $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
           $vs = & $vswhere -latest -products '*' -property installationPath
           $crt = Get-ChildItem "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
