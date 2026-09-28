@@ -51,7 +51,15 @@ jobs:
         shell: bash
         run: |
           SDK="$(dirname "$(dirname "$(which flutter)")")"
-          git -C "$SDK" apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          SDK_PATCH="$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          # flutter-action can restore an SDK already patched by a prior run.
+          # Only skip an exact existing patch, never suppress a real conflict.
+          if git -C "$SDK" apply --reverse --check "$SDK_PATCH" 2>/dev/null; then
+            echo "Flutter dropdown patch already present in cached SDK"
+          else
+            git -C "$SDK" apply --check "$SDK_PATCH"
+            git -C "$SDK" apply "$SDK_PATCH"
+          fi
           cd flutter
           flutter pub get --enforce-lockfile
       - name: Analyze AZSign desktop integration
