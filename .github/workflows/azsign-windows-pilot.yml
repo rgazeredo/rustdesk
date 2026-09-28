@@ -21,6 +21,12 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           submodules: recursive
+      - name: Validate packaging inputs before compilation
+        shell: pwsh
+        run: |
+          foreach ($path in @('LICENCE', '.github/azsign-access-poc/WINDOWS-PILOT.md')) {
+            if (!(Test-Path $path -PathType Leaf)) { throw "Missing packaging input: $path" }
+          }
       - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: '1.98.1'
@@ -90,18 +96,38 @@ jobs:
       - name: Compile desktop
         working-directory: flutter
         run: flutter build windows --release --dart-define=AZSIGN_DESKTOP_CMS_ORIGIN=https://app.azsign.com.br
+      # Preserve expensive outputs before packaging. Re-run failed jobs can now
+      # retry packaging without rebuilding Rust, native dependencies or Flutter.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: windows-build-inputs-not-for-distribution
+          path: |
+            flutter/build/windows/x64/runner/Release/**
+            target/release/dylib_virtual_display.dll
+          if-no-files-found: error
+          retention-days: 14
+  package:
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: windows-build-inputs-not-for-distribution
+          path: compiled
       - name: Package portable pilot
         shell: pwsh
         run: |
-          $bundle = 'flutter/build/windows/x64/runner/Release'
+          $bundle = 'compiled/flutter/build/windows/x64/runner/Release'
           if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
-          Copy-Item target/release/dylib_virtual_display.dll $bundle
+          Copy-Item compiled/target/release/dylib_virtual_display.dll $bundle
           $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
           $vs = & $vswhere -latest -products '*' -property installationPath
           $crt = Get-ChildItem "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
           if (!$crt) { throw 'Missing x64 Visual C++ redistributable directory' }
           Copy-Item "$($crt.FullName)/*.dll" $bundle
-          Copy-Item LICENSE "$bundle/LICENSE-RustDesk.txt"
+          Copy-Item LICENCE "$bundle/LICENSE-RustDesk.txt"
           Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
           $env:GITHUB_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
           Rename-Item "$bundle/rustdesk.exe" 'AZSignRemotePilot.exe'
