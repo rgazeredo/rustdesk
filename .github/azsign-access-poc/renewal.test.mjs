@@ -23,6 +23,7 @@ execFileSync('javac', [
   join(import.meta.dirname, 'AzsignRenewalRuntime.java'),
   join(import.meta.dirname, 'RenewalHttpTest.java'),
   join(import.meta.dirname, 'RenewalRuntimeTest.java'),
+  join(import.meta.dirname, 'RenewalClockTest.java'),
   join(import.meta.dirname, 'RenewalTest.java')
 ]);
 
@@ -68,6 +69,8 @@ const activeJson = {
   expires_at: Date.now() + 86400000
 };
 writeFileSync(join(dir, 'active.json'), JSON.stringify(activeJson));
+assert.equal(execFileSync('java', ['-cp', classpath, 'RenewalClockTest', dir], {encoding: 'utf8'}).trim(), 'clock-verified');
+console.log('✓ Clock corrections after boot cannot defer renewal indefinitely');
 assert.equal(execFileSync('java', ['-cp', classpath, 'com.carriez.flutter_hbb.RenewalHttpTest', dir, id], {encoding: 'utf8'}).trim(), 'http-verified');
 console.log('✓ Real HTTP adapter: request shape, timeout, redirect refusal, bounded JSON, error classification and cancellation');
 const runtimeFiles = join(work, 'runtime-files');
@@ -141,5 +144,7 @@ writeFileSync(join(dir, 'active.json'), JSON.stringify(expiredActive));
 const res3 = java('test-expired', dir, id);
 assert.equal(res3.trim(), 'expired-verified');
 console.log('✓ Expired certificate fails closed: remote transport strictly unauthorized without public fallback');
+assert.equal(java('test-recover-expired', dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der')).trim(), 'success-verified');
+console.log('✓ Expired certificate recovers with the same private key and identity');
 
 console.log('All autonomous renewal scheduler tests passed!');

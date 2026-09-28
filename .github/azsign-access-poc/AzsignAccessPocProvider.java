@@ -22,6 +22,11 @@ public final class AzsignAccessPocProvider extends ContentProvider {
         int uid = Binder.getCallingUid();
         if (uid != 2000 && uid != 0) throw new SecurityException("ADB only");
         try {
+            if ("renewal-status".equals(method)) {
+                Bundle result = new Bundle();
+                result.putString("status", AzsignRenewalRuntime.status(getContext().getFilesDir()).toString());
+                return result;
+            }
             String id = AzsignAccessIdentity.identityId(arg);
             File dir = new File(getContext().getFilesDir(), "azsign-access-poc");
             AzsignAccessIdentity identity = new AzsignAccessIdentity(dir);
