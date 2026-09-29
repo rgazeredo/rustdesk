@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   links:
-    runs-on: ubuntu-22.04
+    runs-on: macos-14
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -19,7 +19,7 @@ jobs:
           flutter-version: '3.24.5'
           channel: stable
           cache: true
-      # These widget tests mock MethodChannel. Windows uses actual DLL/DPAPI,
+      # These widget tests mock macOS Keychain MethodChannel. Windows uses DLL/DPAPI,
       # exercised separately by windows-test and the packaged executable below.
       - name: Test managed links and login confirmation
         working-directory: .github/azsign-access-poc/desktop-test
