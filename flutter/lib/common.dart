@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'common/azsign/azsign_branding.dart';
+import 'common/azsign/azsign_deep_link.dart';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -2255,6 +2256,17 @@ setEnvTerminalAdmin() {
 
 // uri link handler
 bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
+  const cmsOrigin = String.fromEnvironment('AZSIGN_DESKTOP_CMS_ORIGIN');
+  if (isDesktop && cmsOrigin.isNotEmpty) {
+    final candidate = uri ?? Uri.tryParse(uriString ??
+        ((cmdArgs?.isNotEmpty ?? false) ? cmdArgs!.first : ''));
+    if (candidate?.scheme == 'azsign-remote') {
+      final remoteId = azsignRemoteIdFromLink(candidate!);
+      if (remoteId != null) azsignRequestedRemoteId.value = remoteId;
+      windowOnTop(null);
+      return true;
+    }
+  }
   List<String>? args;
   if (cmdArgs != null && cmdArgs.isNotEmpty) {
     args = cmdArgs;

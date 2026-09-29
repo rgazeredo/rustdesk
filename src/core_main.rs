@@ -172,6 +172,12 @@ pub fn core_main() -> Option<Vec<String>> {
         }
     }
     hbb_common::init_log(false, &log_name);
+    #[cfg(all(windows, feature = "azsign-access-poc", feature = "flutter"))]
+    if args.is_empty() || args.first().is_some_and(|arg| arg.starts_with("azsign-remote://")) {
+        if let Err(error) = crate::azsign_windows_ffi::register_remote_protocol() {
+            log::warn!("Could not register AZSign Remote URL protocol: {}", error);
+        }
+    }
 
     // linux uni (url) go here.
     #[cfg(all(target_os = "linux", feature = "flutter"))]

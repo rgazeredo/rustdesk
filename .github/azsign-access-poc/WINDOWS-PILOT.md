@@ -2,6 +2,11 @@
 
 Extraia o ZIP inteiro para uma pasta e abra `AZSign Remote.exe`.
 
+Versão 1.5.1: ao abrir, registra `azsign-remote://` para o usuário atual.
+Mantenha a pasta em um local permanente. Se movê-la, abra o executável novamente.
+O link do painel seleciona o player; entre com AZSign e confirme a conexão.
+Não envia senha pelo link e não altera a associação `rustdesk://` existente.
+
 O catálogo permite buscar pelo nome em todas as páginas. Ao mudar a busca,
 os resultados voltam à primeira página; o botão de limpar restaura a lista.
 A troca do nome não muda os diretórios de dados, certificados ou credenciais.

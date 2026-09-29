@@ -158,7 +158,10 @@ void runMainApp(bool startService) async {
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
-    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
+    final handled = handledByUniLinks || handleUriLink(cmdArgs: kBootArgs);
+    const managedCms = String.fromEnvironment('AZSIGN_DESKTOP_CMS_ORIGIN');
+    // Managed links require visible login/confirmation in the main window.
+    if (handled && managedCms.isEmpty) {
       windowManager.hide();
     } else {
       windowManager.show();

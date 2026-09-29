@@ -7,6 +7,7 @@ import 'azsign_http_transports.dart';
 import 'azsign_native_storage.dart';
 import 'azsign_native_enrollment.dart';
 import 'azsign_types.dart';
+import 'azsign_deep_link.dart';
 
 /// Pilot entry point. Public configuration is applied only after native enrollment.
 class AzsignDesktopPage extends StatefulWidget {
@@ -171,6 +172,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
   }
 
   Future<void> _logout() async {
+    azsignRequestedRemoteId.value = null;
     _searchTimer?.cancel();
     _search.clear();
     _catalogGeneration++;
@@ -199,10 +201,14 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
   }
 
   Future<void> _connect(AddressBookDevice device) async {
+    final remoteId = device.remoteId;
+    if (remoteId != null) await _connectRemoteId(remoteId);
+  }
+
+  Future<void> _connectRemoteId(String remoteId) async {
     final session = _session;
     if (session == null ||
-        widget.onConnect == null ||
-        device.remoteId == null) {
+        widget.onConnect == null) {
       return;
     }
     final generation = _generation;
@@ -213,7 +219,10 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     try {
       final profile = await _enrollment.provision(session.token);
       if (!mounted || generation != _generation) return;
-      await widget.onConnect!(profile, device.remoteId!);
+      await widget.onConnect!(profile, remoteId);
+      if (azsignRequestedRemoteId.value == remoteId) {
+        azsignRequestedRemoteId.value = null;
+      }
     } catch (_) {
       if (mounted && generation == _generation) {
         setState(() => _error =
@@ -246,6 +255,24 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(_error!, semanticsLabel: _error)),
           if (_busy) const LinearProgressIndicator(),
+          ValueListenableBuilder<String?>(
+            valueListenable: azsignRequestedRemoteId,
+            builder: (context, remoteId, _) => remoteId == null
+                ? const SizedBox.shrink()
+                : Card(child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Solicitação do painel: $remoteId'),
+                      const Text('Confirme o ID e a empresa antes de conectar. O gateway verificará sua autorização.'),
+                      Wrap(spacing: 8, children: [
+                        ElevatedButton(
+                          onPressed: _busy || session == null ? null : () => _connectRemoteId(remoteId),
+                          child: const Text('Conectar ao player')),
+                        TextButton(onPressed: () => azsignRequestedRemoteId.value = null,
+                          child: const Text('Cancelar')),
+                      ]),
+                    ]))),
+          ),
           if (session == null) ...[
             const SizedBox(height: 24),
             const Text(

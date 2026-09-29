@@ -1071,6 +1071,9 @@ pub fn is_rustdesk() -> bool {
 
 #[inline]
 pub fn get_uri_prefix() -> String {
+    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]
+    return "azsign-remote://".to_owned();
+    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]
     format!("{}://", get_app_name().to_lowercase())
 }
 

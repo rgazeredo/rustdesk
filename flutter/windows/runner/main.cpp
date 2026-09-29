@@ -91,6 +91,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Uri links dispatch
   HWND hwnd = ::FindWindowW(getWindowClassName(), app_name.c_str());
+  // Storage/IPC retains the legacy identifier; the managed window has a public title.
+  if (hwnd == NULL && app_name == L"AZSignRemotePilot") {
+    hwnd = ::FindWindowW(getWindowClassName(), L"AZSign Remote");
+  }
   if (hwnd != NULL) {
     // Allow multiple flutter instances when being executed by parameters
     // contained in whitelists.
