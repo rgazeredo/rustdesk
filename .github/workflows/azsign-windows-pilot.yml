@@ -211,10 +211,20 @@ jobs:
             if ((Get-Item $protocol).GetValue('URL Protocol') -ne '') { throw 'Missing URL Protocol marker' }
             $command = (Get-Item "$protocol\shell\open\command").GetValue('')
             if ($command -ne ('"' + $exe + '" "%1"')) { throw "Unexpected protocol command: $command" }
+            $before = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe })
+            $before | Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
             Start-Process 'azsign-remote://connection/new/123456789'
             Start-Sleep -Seconds 5
-            $instances = @(Get-Process | Where-Object { $_.Path -eq $exe })
-            if ($instances.Count -ne 1) { throw "Expected one application instance, got $($instances.Count)" }
+            $after = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe })
+            $after | Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
+            $app.Refresh()
+            if ($app.HasExited) { throw 'Original application exited during link dispatch' }
+            # Native helper processes are not additional desktop windows.
+            $windows = @(Get-Process | Where-Object { $_.Path -eq $exe -and $_.MainWindowHandle -ne 0 })
+            $windows | Select-Object Id, MainWindowTitle | Format-List
+            if ($windows.Count -ne 1 -or $windows[0].Id -ne $app.Id) { throw 'Link did not reuse the original desktop window' }
+            $newProcesses = @($after | Where-Object { $_.ProcessId -notin $before.ProcessId })
+            if ($newProcesses.Count -ne 0) { throw 'Link left a second application process running' }
             Write-Output 'Protocol registration, quoted executable path and warm-link dispatch passed.'
           } catch {
             Write-Host "Protocol validation failed: $_"
