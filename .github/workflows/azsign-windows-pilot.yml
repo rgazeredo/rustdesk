@@ -1,10 +1,16 @@
 name: AZSign Windows pilot
 on:
   workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: 'Reuse compiled inputs from a verified run (packaging-only changes)'
+        required: false
+        type: string
   push:
     branches: [feat/azsign-desktop-windows]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: azsign-windows-pilot-${{ github.ref }}
   cancel-in-progress: false
@@ -27,6 +33,7 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter test --no-pub
   windows:
+    if: ${{ !inputs.build_run_id }}
     runs-on: windows-2022
     timeout-minutes: 150
     env:
@@ -136,16 +143,49 @@ jobs:
           retention-days: 14
   package:
     needs: [windows, links]
+    if: ${{ always() && needs.links.result == 'success' && (needs.windows.result == 'success' || (inputs.build_run_id && needs.windows.result == 'skipped')) }}
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - name: Verify reused build provenance
+        id: provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          $buildSha = $env:GITHUB_SHA
+          if ($env:BUILD_RUN_ID) {
+            if ($env:BUILD_RUN_ID -notmatch '^\d+$') { throw 'Invalid build run ID' }
+            $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN_ID" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot read source run' }
+            if ($run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $run.head_branch -ne 'feat/azsign-desktop-windows') { throw 'Unexpected source repository/branch' }
+            $jobs = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN_ID/jobs?per_page=100" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot read source jobs' }
+            foreach ($name in @('windows', 'links')) {
+              if (@($jobs.jobs | Where-Object { $_.name -eq $name -and $_.conclusion -eq 'success' }).Count -ne 1) { throw "Source job did not pass: $name" }
+            }
+            $buildSha = $run.head_sha
+            $changed = @(git diff --name-only $buildSha $env:GITHUB_SHA)
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot compare source commit' }
+            foreach ($path in $changed) {
+              if ($path -ne '.github/workflows/azsign-windows-pilot.yml') { throw "Rebuild required for changed input: $path" }
+            }
+          }
+          "sha=$buildSha" >> $env:GITHUB_OUTPUT
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: windows-build-inputs-not-for-distribution
           path: compiled
+          run-id: ${{ inputs.build_run_id || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Package portable pilot
         shell: pwsh
+        env:
+          BUILD_SHA: ${{ steps.provenance.outputs.sha }}
         run: |
           $bundle = 'compiled/flutter/build/windows/x64/runner/Release'
           if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
@@ -157,7 +197,7 @@ jobs:
           Copy-Item "$($crt.FullName)/*.dll" $bundle
           Copy-Item LICENCE "$bundle/LICENSE-RustDesk.txt"
           Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
-          $env:GITHUB_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
+          $env:BUILD_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
           Rename-Item "$bundle/rustdesk.exe" 'AZSign Remote.exe'
           $probe = Start-Process -FilePath "$bundle/AZSign Remote.exe" -ArgumentList '--version' -PassThru
           if (!$probe.WaitForExit(30000)) { $probe.Kill(); throw 'Native loader smoke test timed out' }
@@ -176,8 +216,15 @@ jobs:
             $instances = @(Get-Process | Where-Object { $_.Path -eq $exe })
             if ($instances.Count -ne 1) { throw "Expected one application instance, got $($instances.Count)" }
             Write-Output 'Protocol registration, quoted executable path and warm-link dispatch passed.'
+          } catch {
+            Write-Host "Protocol validation failed: $_"
+            throw
           } finally {
-            Get-Process | Where-Object { $_.Path -eq $exe } | Stop-Process
+            # Stop by PID; pipeline Process objects can race with process exit.
+            $appProcesses = @(Get-Process | Where-Object { $_.Path -eq $exe })
+            foreach ($appProcess in $appProcesses) {
+              Stop-Process -Id $appProcess.Id -Force -ErrorAction Continue
+            }
           }
           Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemote-windows-x64.zip
           (Get-FileHash AZSignRemote-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemote-windows-x64.sha256
