@@ -20,9 +20,9 @@ class EnrollmentHttp extends AzsignHttp {
       Map<String, dynamic>? body,
       Map<String, String>? query}) async {
     calls.add(path);
-    expect(token, 'bearer');
+    expectSync(token, 'bearer');
     if (path.endsWith('/certificate')) {
-      expect(body, {'csr': 'public CSR'});
+      expectSync(body, {'csr': 'public CSR'});
       await certificateWait?.future;
       return AzsignHttpResponse(200, {
         'identity_id': wrongIdentity ? 'other' : 'identity',

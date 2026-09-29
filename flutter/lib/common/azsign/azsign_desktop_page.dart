@@ -57,17 +57,31 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
         secureStorage: AzsignNativeStorage());
     _catalog = AzsignAddressBookService(
         transport: AzsignHttpAddressBookTransport(_http));
+    azsignRequestedRemoteId.addListener(_schedulePendingLink);
     _restore();
   }
 
   @override
   void dispose() {
+    azsignRequestedRemoteId.removeListener(_schedulePendingLink);
     _searchTimer?.cancel();
     _search.dispose();
     _generation++;
     _auth.cancelLogin();
     _http.close();
     super.dispose();
+  }
+
+  void _schedulePendingLink() {
+    // Wait until restore/login/catalog continuations have settled their busy state.
+    Timer.run(() {
+      if (!mounted || _busy || _session == null || widget.onConnect == null) return;
+      final remoteId = azsignRequestedRemoteId.value;
+      if (remoteId == null) return;
+      // Consume before enrollment: denial must not trigger an automatic retry loop.
+      azsignRequestedRemoteId.value = null;
+      unawaited(_connectRemoteId(remoteId));
+    });
   }
 
   Future<void> _restore() async {
@@ -83,6 +97,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+      _schedulePendingLink();
     }
   }
 
@@ -119,6 +134,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
           _session = result.session;
           _request = null;
         });
+        _schedulePendingLink();
         await _load(1);
         return;
       }
@@ -166,8 +182,10 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     } finally {
       if (mounted &&
           generation == _generation &&
-          catalogGeneration == _catalogGeneration)
+          catalogGeneration == _catalogGeneration) {
         setState(() => _busy = false);
+        _schedulePendingLink();
+      }
     }
   }
 
@@ -230,6 +248,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
       }
     } finally {
       if (mounted && generation == _generation) setState(() => _busy = false);
+      _schedulePendingLink();
     }
   }
 
@@ -255,24 +274,6 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(_error!, semanticsLabel: _error)),
           if (_busy) const LinearProgressIndicator(),
-          ValueListenableBuilder<String?>(
-            valueListenable: azsignRequestedRemoteId,
-            builder: (context, remoteId, _) => remoteId == null
-                ? const SizedBox.shrink()
-                : Card(child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Solicitação do painel: $remoteId'),
-                      const Text('Confirme o ID e a empresa antes de conectar. O gateway verificará sua autorização.'),
-                      Wrap(spacing: 8, children: [
-                        ElevatedButton(
-                          onPressed: _busy || session == null ? null : () => _connectRemoteId(remoteId),
-                          child: const Text('Conectar ao player')),
-                        TextButton(onPressed: () => azsignRequestedRemoteId.value = null,
-                          child: const Text('Cancelar')),
-                      ]),
-                    ]))),
-          ),
           if (session == null) ...[
             const SizedBox(height: 24),
             const Text(

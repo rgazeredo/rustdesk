@@ -30,12 +30,65 @@ class LinkHttp extends EnrollmentHttp {
   }
 }
 
+class LoginLinkHttp extends LinkHttp {
+  @override
+  Future<AzsignHttpResponse> request(String method, String path,
+      {String? token, Map<String, dynamic>? body, Map<String, String>? query}) async {
+    if (path.endsWith('/authorizations')) {
+      return const AzsignHttpResponse(200, {
+        'device_code': 'device-code', 'user_code': 'CODE',
+        'verification_uri': 'https://app.azsign.com.br/desktop/authorize/00000000-0000-4000-8000-000000000001',
+        'expires_in': 600, 'interval': 3,
+      });
+    }
+    if (path.endsWith('/authorizations/token')) {
+      return AzsignHttpResponse(200, {
+        'access_token': 'bearer',
+        'expires_at': DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        'user': {'id': 'user', 'name': 'Admin', 'email': 'user@example.test'},
+        'tenant': {'id': 'tenant', 'name': 'VTM'},
+      });
+    }
+    return super.request(method, path, token: token, body: body, query: query);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tearDown(() => azsignRequestedRemoteId.value = null);
+  testWidgets('pending link connects automatically after browser login', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('org.rustdesk.rustdesk/host'), (call) async {
+      if (call.method == 'azsignNativeTransportAvailable') return true;
+      if (call.method == 'azsignIdentityPrepare') {
+        return {'identity_id': 'identity', 'csr': 'public CSR'};
+      }
+      return null;
+    });
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/url_launcher'), (call) async => false);
+    final connections = <String>[];
+    azsignRequestedRemoteId.value = '1465886383';
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: AzsignDesktopPage(
+      cmsOrigin: 'https://app.azsign.com.br',
+      httpFactory: (_) => LoginLinkHttp(),
+      onConnect: (_, id) async { connections.add(id); },
+    ))));
+    await tester.pumpAndSettle();
+    expect(connections, isEmpty);
+    await tester.tap(find.text('Entrar com AZSign'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(connections, ['1465886383'], reason: tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | '));
+    expect(azsignRequestedRemoteId.value, isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   for (final denied in [false, true]) {
     testWidgets(
-        'confirmed link uses enrollment and refuses denied CMS: $denied',
+        'direct link uses enrollment once and refuses denied CMS: $denied',
         (tester) async {
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           const MethodChannel('org.rustdesk.rustdesk/host'), (call) async {
@@ -57,13 +110,17 @@ void main() {
                     connections.add(id);
                   }))));
       await tester.pumpAndSettle();
-      expect(connections, isEmpty);
-      await tester.tap(find.text('Conectar ao player'));
+      expect(find.text('Conectar ao player'), findsNothing);
+      expect(connections, denied ? isEmpty : ['1465886383']);
+      expect(azsignRequestedRemoteId.value, isNull);
+      if (!denied) expect(http.calls.length, 3);
+      await tester.tap(find.text('Atualizar'));
       await tester.pumpAndSettle();
       expect(connections, denied ? isEmpty : ['1465886383']);
-      if (!denied) expect(http.calls.length, 3);
       azsignRequestedRemoteId.value = '1865846518';
+      await tester.pump(const Duration(milliseconds: 1));
       await tester.pumpAndSettle();
+      expect(connections, denied ? isEmpty : ['1465886383', '1865846518'], reason: '${http.calls} / pending=${azsignRequestedRemoteId.value} / ${tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | ')}');
       await tester.tap(find.text('Sair'));
       await tester.pumpAndSettle();
       expect(azsignRequestedRemoteId.value, isNull);
@@ -105,20 +162,12 @@ void main() {
                   connections++;
                 }))));
     await tester.pumpAndSettle();
-    expect(find.text('Solicitação do painel: 1465886383'), findsOneWidget);
-    expect(
-        tester
-            .widget<ElevatedButton>(
-                find.widgetWithText(ElevatedButton, 'Conectar ao player'))
-            .onPressed,
-        isNull);
+    expect(find.text('Conectar ao player'), findsNothing);
+    expect(azsignRequestedRemoteId.value, '1465886383');
     expect(connections, 0);
     azsignRequestedRemoteId.value = '1865846518';
     await tester.pumpAndSettle();
-    expect(find.text('Solicitação do painel: 1865846518'), findsOneWidget);
-    await tester.tap(find.text('Cancelar'));
-    await tester.pumpAndSettle();
-    expect(azsignRequestedRemoteId.value, isNull);
+    expect(azsignRequestedRemoteId.value, '1865846518');
     expect(connections, 0);
     await tester.pumpWidget(const SizedBox.shrink());
   });
