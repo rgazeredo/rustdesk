@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'common/azsign/azsign_branding.dart';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -1607,7 +1608,7 @@ String translate(String name) {
   if (name.startsWith('Failed to') && name.contains(': ')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
-  return platformFFI.translate(name, localeName);
+  return azsignDisplayText(platformFFI.translate(name, localeName));
 }
 
 // This function must be kept the same as the one in rust and sciter code.
@@ -3022,7 +3023,7 @@ int versionCmp(String v1, String v2) {
 
 String getWindowName({WindowType? overrideType}) {
   final internalName = bind.mainGetAppNameSync();
-  final name = internalName == 'AZSignRemotePilot' ? 'AZSign Remote' : internalName;
+  final name = azsignDisplayText(internalName);
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
       return name;

@@ -42,6 +42,8 @@ pub fn core_main() -> Option<Vec<String>> {
         // return None to terminate the process
         return None;
     }
+    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]
+    config::HARD_SETTINGS.write().ok()?.insert("conn-type".to_owned(), "outgoing".to_owned());
     let mut args = Vec::new();
     let mut flutter_args = Vec::new();
     let mut i = 0;

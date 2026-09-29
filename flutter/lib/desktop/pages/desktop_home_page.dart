@@ -60,6 +60,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
+    const cmsOrigin = String.fromEnvironment('AZSIGN_DESKTOP_CMS_ORIGIN');
+    if ((Platform.isMacOS || Platform.isWindows) && cmsOrigin.isNotEmpty) {
+      return _buildBlock(child: buildRightPane(context));
+    }
     return _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
