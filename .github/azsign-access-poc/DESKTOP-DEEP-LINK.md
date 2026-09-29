@@ -20,7 +20,26 @@ Identificadores internos de armazenamento/Keychain/DPAPI não são renomeados.
   a pasta, abrir novamente para atualizar o caminho. Não altera rustdesk://.
 - Nenhuma alteração no APK Android, no Setup, no gateway ou nos certificados.
 
-## Homologação dos novos pacotes (pendente)
+## Verificação dos pacotes 1.5.2
+
+Windows: Actions `36632600077` reaproveitou os binários de `36602825219`,
+commit `f1f99595eb37805c8b6257389e2062ded3fc1560`, após conferir origem,
+sucesso dos testes/compilação e ausência de mudanças fora do workflow.
+Passaram loader nativo, registro HKCU, caminho com espaços e link com app aberto:
+uma janela principal original, sem novo processo persistente após o link.
+O teste anterior contava processos auxiliares como novas instâncias; a limpeza
+via pipeline também mascarava a mensagem. Correções restritas ao workflow.
+14 testes Flutter passaram novamente. ZIP e SHA-256 conferidos.
+
+macOS ARM64: build 1.5.2, assinatura ad hoc, scheme no Info.plist, ZIP e DMG
+verificados. A abertura interativa desta revisão requer confirmação do operador;
+o teste anterior de associação fria/quente foi na 1.5.1, não na 1.5.2.
+
+Superfície desta correção: somente `.github/workflows/azsign-windows-pilot.yml`
+(proveniência, reutilização dos outputs e smoke test). Nenhum caminho de runtime,
+APK, CMS, gateway ou identificador de credenciais foi alterado nesta correção.
+
+## Homologação física restante
 
 Testar o link do painel no navegador com app fechado, aberto e minimizado,
 antes/depois do login. Confirmar que não cria outra instância no Windows.
