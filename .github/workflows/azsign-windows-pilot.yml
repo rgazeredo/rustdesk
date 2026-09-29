@@ -9,6 +9,23 @@ concurrency:
   group: azsign-windows-pilot-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  links:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      # These widget tests mock MethodChannel. Windows uses actual DLL/DPAPI,
+      # exercised separately by windows-test and the packaged executable below.
+      - name: Test managed links and login confirmation
+        working-directory: .github/azsign-access-poc/desktop-test
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter test --no-pub
   windows:
     runs-on: windows-2022
     timeout-minutes: 150
@@ -65,11 +82,6 @@ jobs:
       - name: Analyze AZSign desktop integration
         working-directory: flutter
         run: dart analyze lib/common/azsign/azsign_native_channel.dart lib/common/azsign/azsign_native_storage.dart lib/common/azsign/azsign_native_enrollment.dart
-      - name: Test managed links and login confirmation
-        working-directory: .github/azsign-access-poc/desktop-test
-        run: |
-          flutter pub get --enforce-lockfile
-          flutter test --no-pub
       - name: Install verified RustDesk Windows engine
         shell: pwsh
         run: |
@@ -123,7 +135,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   package:
-    needs: windows
+    needs: [windows, links]
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
