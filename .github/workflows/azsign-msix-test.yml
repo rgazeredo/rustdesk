@@ -1,0 +1,74 @@
+name: AZSign Remote MSIX test
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/azsign-remote-msix-test]
+    paths:
+      - '.github/azsign-access-poc/msix/**'
+      - '.github/workflows/azsign-msix-test.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  msix:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Verify source release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/36916068285" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read source release' }
+          if ($run.conclusion -ne 'success' -or $run.head_sha -ne '11e21ff7dfc351da19db66cf8886ac9457d2a55b') { throw 'Unexpected source release' }
+          if ($run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $run.path -ne '.github/workflows/azsign-windows-pilot.yml') { throw 'Unexpected source repository/workflow' }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: AZSignRemote-windows-x64
+          path: source
+          run-id: 36916068285
+          github-token: ${{ github.token }}
+      - name: Prepare verified runtime
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash source/AZSignRemote-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne '5c705149eb6745d13dc94daf84cb566cf5765ba853048ffdc06206a9bd992964') { throw 'Unexpected runtime archive' }
+          Expand-Archive source/AZSignRemote-windows-x64.zip bundle
+          if ((Get-Content bundle/BUILD-COMMIT.txt -Raw).Trim() -ne 'f1f99595eb37805c8b6257389e2062ded3fc1560') { throw 'Unexpected runtime commit' }
+      - name: Sign test packages with an ephemeral certificate
+        shell: pwsh
+        run: |
+          $certificate = New-SelfSignedCertificate -Type Custom -Subject 'CN=AZSign Remote MSIX Test' -FriendlyName 'AZSign Remote MSIX Test only' -KeyUsage DigitalSignature -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy NonExportable -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(30) -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
+          New-Item -ItemType Directory dist | Out-Null
+          Export-Certificate -Cert $certificate -FilePath dist/AZSign-Remote-Test.cer | Out-Null
+          $certificate | Select-Object Subject, Thumbprint, NotBefore, NotAfter | Format-List | Out-File dist/SIGNING-CERTIFICATE.txt
+          try {
+            ./.github/azsign-access-poc/msix/package.ps1 -BundleDir bundle -OutputDir dist -CertificateThumbprint $certificate.Thumbprint -Version 1.5.2.0
+            ./.github/azsign-access-poc/msix/package.ps1 -BundleDir bundle -OutputDir dist -CertificateThumbprint $certificate.Thumbprint -Version 1.5.2.1
+          } finally {
+            Remove-Item "Cert:\CurrentUser\My\$($certificate.Thumbprint)" -DeleteKey
+          }
+          Copy-Item .github/azsign-access-poc/msix/README.md dist/LEIA-ME.md
+          Get-ChildItem dist -File | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+      - name: Test package lifecycle and native credentials
+        shell: powershell
+        run: ./.github/azsign-access-poc/msix/test.ps1 -PackageDir dist -BundleDir bundle
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: AZSign-Remote-MSIX-test
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: MSIX-test-diagnostics
+          path: msix-results/*
+          if-no-files-found: ignore
+          retention-days: 7

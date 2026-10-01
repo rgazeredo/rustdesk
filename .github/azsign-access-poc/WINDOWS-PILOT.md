@@ -1,5 +1,8 @@
 # AZSign Remote — Windows x64
 
+Prova de conceito para Microsoft Store: veja [teste MSIX](msix/README.md).
+O MSIX usa identidade/certificado de laboratório e não substitui as entregas abaixo.
+
 O instalador `AZSign-Remote-Setup-1.5.2-windows-x64.exe` instala para o usuário
 atual, sem administrador, em `%LOCALAPPDATA%\Programs\AZSign Remote` por padrão.
 Cria atalho no menu Iniciar, oferece atalho na área de trabalho e registra o link
