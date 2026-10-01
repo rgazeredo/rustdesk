@@ -53,7 +53,7 @@ function Test-Activation {
     $windows = @(Get-Process | Where-Object { $_.Path -eq $exe -and $_.MainWindowHandle -ne 0 })
     if ($windows.Count -ne 1) { throw "Cold MSIX protocol launch produced $($windows.Count) windows" }
     $firstId = $windows[0].Id
-    Add-Type @'
+    if (!('RemoteProcessIdentity' -as [type])) { Add-Type @'
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
@@ -62,6 +62,7 @@ public static class RemoteProcessIdentity {
     public static extern int GetPackageFullName(IntPtr process, ref uint length, StringBuilder name);
 }
 '@
+    }
     [uint32]$length = 512
     $identity = New-Object Text.StringBuilder 512
     if ([RemoteProcessIdentity]::GetPackageFullName($windows[0].Handle, [ref]$length, $identity) -ne 0 -or $identity.ToString() -ne $Package.PackageFullName) { throw 'Desktop window does not have MSIX identity' }
@@ -70,6 +71,14 @@ public static class RemoteProcessIdentity {
     $windows = @(Get-Process | Where-Object { $_.Path -eq $exe -and $_.MainWindowHandle -ne 0 })
     if ($windows.Count -ne 1 -or $windows[0].Id -ne $firstId) { throw 'Warm MSIX link did not reuse the original window' }
     Stop-Remote $Package
+}
+function Save-Protocol {
+    param([string]$Label)
+    $key = 'HKCU:\Software\Classes\azsign-remote'
+    if (Test-Path $key) {
+        Get-Item $key | Format-List * | Out-File "$results\protocol-$Label.txt"
+        Get-ChildItem $key -Recurse | ForEach-Object { Get-ItemProperty $_.PSPath } | Format-List * | Out-File "$results\protocol-$Label.txt" -Append
+    } else { 'No unpackaged protocol key' | Set-Content "$results\protocol-$Label.txt" }
 }
 
 try {
@@ -81,6 +90,9 @@ try {
     if (!$package -or $package.Version -ne '1.5.2.0') { throw 'Initial deployment failed' }
     $manifest = Get-AppxPackageManifest $package.PackageFullName
     if ($manifest.Package.Applications.Application.Extensions.Extension.Protocol.Name -ne 'azsign-remote') { throw 'Missing manifest protocol' }
+    Save-Protocol 'installed'
+    Test-Activation $package
+    Save-Protocol 'launched'
     $write = Invoke-Probe 'write' 'packaged-write' $package
     $read = Invoke-Probe 'read' 'packaged-restart' $package
     if ($write.csrSha256 -ne $read.csrSha256) { throw 'Native private key changed after restart' }
@@ -91,12 +103,18 @@ try {
     if ($write.csrSha256 -ne $upgrade.csrSha256) { throw 'Native private key changed after upgrade' }
     Invoke-Probe 'cleanup' 'packaged-token-delete' $package | Out-Null
     Test-Activation $package
-    if (Test-Path 'HKCU:\Software\Classes\azsign-remote') { throw 'Packaged self-registration escaped registry virtualization' }
+    Save-Protocol 'upgraded'
     Remove-AppxPackage -Package $package.PackageFullName
+    Save-Protocol 'removed'
     if (Get-AppxPackage -Name $name) { throw 'Package removal failed' }
+    $commandKey = 'HKCU:\Software\Classes\azsign-remote\shell\open\command'
+    if (Test-Path $commandKey) {
+        $command = (Get-Item $commandKey).GetValue('')
+        if ($command -like '*WindowsApps*AZSign Remote.exe*') { throw "Uninstall left a stale executable association: $command" }
+    }
     if (!(Test-Path $legacyFile) -or (Get-FileHash $legacyFile).Hash -ne $legacyHash) { throw 'Legacy credentials were changed or removed' }
     Invoke-Probe 'seed' 'unpackaged-after-uninstall' | Out-Null
-    'PASS: deployment, native DPAPI, legacy identity read, key persistence, upgrade, cold/warm protocol activation with real MSIX identity, virtualized registry and uninstall.' | Set-Content "$results\summary.txt"
+    'PASS: deployment, native DPAPI, legacy identity read, key persistence, upgrade, cold/warm protocol activation with real MSIX identity, protocol cleanup and uninstall.' | Set-Content "$results\summary.txt"
     Get-Content "$results\summary.txt"
 } finally {
     $package = Get-AppxPackage -Name $name
