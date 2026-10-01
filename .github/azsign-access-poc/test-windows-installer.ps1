@@ -45,7 +45,10 @@ function Install-Remote {
     Assert-Preserved
 }
 function Uninstall-Remote {
-    $process = Start-Process "$installDir/unins000.exe" -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -PassThru
+    $uninstaller = (Get-ItemPropertyValue $uninstallKey 'UninstallString').Trim('"')
+    if (!(Test-Path $uninstaller -PathType Leaf)) { throw "Registered uninstaller is missing: $uninstaller" }
+    Write-Output "Testing registered uninstaller: $uninstaller"
+    $process = Start-Process $uninstaller -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -PassThru
     if (!$process.WaitForExit(120000)) { $process.Kill(); throw 'Uninstall timed out' }
     if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
     if ((Test-Path $exe) -or (Test-Path $uninstallKey) -or (Test-Path $startLink) -or (Test-Path $desktopLink)) { throw 'Uninstall left application, registration or shortcuts' }
