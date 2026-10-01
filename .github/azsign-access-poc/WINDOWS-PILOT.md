@@ -1,6 +1,15 @@
 # AZSign Remote — Windows x64
 
-Extraia o ZIP inteiro para uma pasta e abra `AZSign Remote.exe`.
+O instalador `AZSign-Remote-Setup-1.5.2-windows-x64.exe` instala para o usuário
+atual, sem administrador, em `%LOCALAPPDATA%\Programs\AZSign Remote` por padrão.
+Cria atalho no menu Iniciar, oferece atalho na área de trabalho e registra o link
+`azsign-remote://` durante a instalação. Pode ser removido em Aplicativos do Windows.
+Reexecutar o instalador atualiza/repara os arquivos; feche sessões antes de atualizar.
+Configurações e credenciais do usuário são preservadas, inclusive ao desinstalar.
+Para revogar a sessão, use Sair no Remote antes de remover o aplicativo.
+
+A versão ZIP continua disponível: extraia o ZIP inteiro para uma pasta e abra
+`AZSign Remote.exe`. As orientações sobre mover a pasta abaixo valem para o ZIP.
 
 Versão 1.5.2: ao abrir, registra `azsign-remote://` para o usuário atual.
 Mantenha a pasta em um local permanente. Se movê-la, abra o executável novamente.
@@ -50,3 +59,27 @@ homologado até concluir esses passos.
 Baseado em RustDesk, sob AGPL-3.0. Código correspondente e instruções:
 https://github.com/rgazeredo/rustdesk/tree/feat/azsign-desktop-windows
 Consulte também LICENSE-RustDesk.txt distribuído neste pacote.
+
+## Empacotamento Windows
+
+O workflow `azsign-windows-pilot.yml` gera ZIP e instalador Inno Setup 6 com os
+mesmos binários. O job de empacotamento exige testes de instalação, integridade,
+atalhos, protocolo, abertura, reparo e desinstalação antes de disponibilizar o artefato.
+O AppId do instalador é AZSignRemote; o armazenamento interno AZSignRemotePilot
+permanece inalterado. Não instala serviços, drivers nem associa rustdesk://.
+O desinstalador remove apenas arquivos registrados pelo instalador e só remove
+azsign-remote:// se o comando ainda apontar para a instalação removida.
+Abrir uma cópia portátil depois de instalar pode reassociar o protocolo a ela;
+reabra a cópia instalada para restaurar a associação.
+
+Para empacotar um bundle Windows já preparado, em PowerShell com Inno Setup 6:
+
+```powershell
+./.github/azsign-access-poc/package-desktop-windows.ps1 -BundleDir C:\build\Remote -OutputDir C:\build\installer
+```
+
+A versão é lida do pubspec.yaml. O bundle deve conter licença, BUILD-COMMIT.txt,
+DLLs nativas, runtime Visual C++ e assets Flutter completos, como preparado no CI.
+O instalador ainda não tem assinatura Authenticode; o empacotamento não elimina
+avisos SmartScreen/Smart App Control. Homologar também em Windows 10/11 com usuário
+padrão e instalação interativa. Os testes automáticos usam runner descartável.

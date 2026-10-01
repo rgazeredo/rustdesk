@@ -172,7 +172,16 @@ jobs:
             $changed = @(git diff --name-only $buildSha $env:GITHUB_SHA)
             if ($LASTEXITCODE -ne 0) { throw 'Cannot compare source commit' }
             foreach ($path in $changed) {
-              if ($path -ne '.github/workflows/azsign-windows-pilot.yml') { throw "Rebuild required for changed input: $path" }
+              $packagingOnly = @(
+                '.github/workflows/azsign-windows-pilot.yml',
+                '.github/azsign-access-poc/windows-installer.iss',
+                '.github/azsign-access-poc/package-desktop-windows.ps1',
+                '.github/azsign-access-poc/test-windows-installer.ps1',
+                '.github/azsign-access-poc/package-desktop-macos.sh',
+                '.github/azsign-access-poc/WINDOWS-PILOT.md',
+                '.github/azsign-access-poc/DESKTOP-DEEP-LINK.md'
+              )
+              if ($path -notin $packagingOnly) { throw "Rebuild required for changed input: $path" }
             }
           }
           "sha=$buildSha" >> $env:GITHUB_OUTPUT
@@ -238,11 +247,22 @@ jobs:
           }
           Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemote-windows-x64.zip
           (Get-FileHash AZSignRemote-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemote-windows-x64.sha256
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./.github/azsign-access-poc/package-desktop-windows.ps1 -BundleDir compiled/flutter/build/windows/x64/runner/Release -OutputDir installer
+      - name: Test installation, repair and uninstall
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem installer/AZSign-Remote-Setup-*-windows-x64.exe
+          if (@($installer).Count -ne 1) { throw 'Expected one installer' }
+          ./.github/azsign-access-poc/test-windows-installer.ps1 -Installer $installer.FullName -BundleDir compiled/flutter/build/windows/x64/runner/Release
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: AZSignRemote-windows-x64
           path: |
             AZSignRemote-windows-x64.zip
             AZSignRemote-windows-x64.sha256
+            installer/AZSign-Remote-Setup-*-windows-x64.exe
+            installer/AZSign-Remote-Setup-*-windows-x64.exe.sha256
           if-no-files-found: error
           retention-days: 14
