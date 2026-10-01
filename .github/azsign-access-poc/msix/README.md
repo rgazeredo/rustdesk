@@ -97,3 +97,22 @@ Windows App Certification Kit e homologação ponta a ponta; preparar política 
 privacidade, descrição, imagens e conta de demonstração para certificação.
 `runFullTrust` deve ser justificado como cliente desktop de suporte a players.
 A licença AGPL do fork RustDesk e o acesso ao código correspondente permanecem.
+
+## Resultado de 01/10/2026
+
+Actions [36918753611](https://github.com/rgazeredo/rustdesk/actions/runs/36918753611)
+aprovado, commit `266513517`. Pacotes 1.5.2.0 e 1.5.2.1 assinados, instalados,
+atualizados e removidos no Windows Server 2022 do runner. Passaram leitura da
+identidade legada, DPAPI, persistência da chave entre processos e versões, exclusão
+do token fictício e links frios/quentes com identidade MSIX comprovada no processo.
+O marcador HKCU/Software/Classes/azsign-remote já existe após instalar, antes da
+primeira execução, e permanece sem subchave shell/open/command após remoção.
+Não é um caminho obsoleto gravado pelo Remote; o teste inicial que rejeitava a
+mera existência dessa chave era incorreto. A associação funciona após atualização
+e não deixa comando apontando para o executável removido.
+
+Certificado desta execução: DB7A6BC1AC0541873330F1BFE516C21F36B3E979, expira em
+31/10/2026. Validação interativa no Windows 10/11, conexão com box e certificação
+da Microsoft Store continuam pendentes. Nenhuma lógica existente do aplicativo
+foi modificada: somente arquivos novos de empacotamento/teste e o link em
+WINDOWS-PILOT.md. O workflow EXE/ZIP também permanece inalterado.
