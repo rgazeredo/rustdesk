@@ -1,13 +1,16 @@
 param(
     [Parameter(Mandatory)][string]$PackageDir,
-    [Parameter(Mandatory)][string]$BundleDir
+    [Parameter(Mandatory)][string]$BundleDir,
+    [string]$IdentityName = 'AZSign.Remote.Test',
+    [string]$InitialVersion = '1.5.2.0',
+    [string]$UpgradeVersion = '1.5.2.1'
 )
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true') { throw 'Run only on a disposable Windows CI runner' }
 $packageDir = (Resolve-Path $PackageDir).Path
 $bundle = (Resolve-Path $BundleDir).Path
 $results = (New-Item -ItemType Directory -Path msix-results -Force).FullName
-$name = 'AZSign.Remote.Test'
+$name = $IdentityName
 if (Get-AppxPackage -Name $name) { throw 'Test package already installed' }
 $legacy = Join-Path $env:LOCALAPPDATA 'AZSignRemotePilot\SecureStore'
 if (Test-Path $legacy) { throw 'Refusing to overwrite pre-existing credentials' }
@@ -85,9 +88,9 @@ try {
     Invoke-Probe 'seed' 'unpackaged-baseline' | Out-Null
     $legacyFile = Join-Path $legacy 'azsign_desktop_device_id.dpapi'
     $legacyHash = (Get-FileHash $legacyFile).Hash
-    Add-AppxPackage -Path "$packageDir\AZSign-Remote-Test-1.5.2.0-x64.msix"
+    Add-AppxPackage -Path "$packageDir\AZSign-Remote-Test-$InitialVersion-x64.msix"
     $package = Get-AppxPackage -Name $name
-    if (!$package -or $package.Version -ne '1.5.2.0') { throw 'Initial deployment failed' }
+    if (!$package -or $package.Version -ne $InitialVersion) { throw 'Initial deployment failed' }
     $manifest = Get-AppxPackageManifest $package.PackageFullName
     if ($manifest.Package.Applications.Application.Extensions.Extension.Protocol.Name -ne 'azsign-remote') { throw 'Missing manifest protocol' }
     Save-Protocol 'installed'
@@ -96,9 +99,9 @@ try {
     $write = Invoke-Probe 'write' 'packaged-write' $package
     $read = Invoke-Probe 'read' 'packaged-restart' $package
     if ($write.csrSha256 -ne $read.csrSha256) { throw 'Native private key changed after restart' }
-    Add-AppxPackage -Path "$packageDir\AZSign-Remote-Test-1.5.2.1-x64.msix"
+    Add-AppxPackage -Path "$packageDir\AZSign-Remote-Test-$UpgradeVersion-x64.msix"
     $package = Get-AppxPackage -Name $name
-    if ($package.Version -ne '1.5.2.1') { throw 'MSIX upgrade failed' }
+    if ($package.Version -ne $UpgradeVersion) { throw 'MSIX upgrade failed' }
     $upgrade = Invoke-Probe 'read' 'packaged-upgrade' $package
     if ($write.csrSha256 -ne $upgrade.csrSha256) { throw 'Native private key changed after upgrade' }
     Invoke-Probe 'cleanup' 'packaged-token-delete' $package | Out-Null
