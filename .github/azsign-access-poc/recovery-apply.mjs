@@ -37,3 +37,16 @@ console.log('AZSign Android identity, recovery and read-only device screen appli
 patch(java+'MainService.kt', 'const val DEFAULT_NOTIFY_TITLE = "RustDesk"', 'const val DEFAULT_NOTIFY_TITLE = "AZSign Remote"');
 patch(java+'MainService.kt', 'val channelName = "RustDesk Service"', 'val channelName = "AZSign Remote"');
 patch(java+'MainService.kt', 'description = "RustDesk Service Channel"', 'description = "Compartilhamento de tela AZSign Remote"');
+
+// Use the existing fixed-setting mechanism so old saved preferences cannot re-enable it.
+patch('libs/hbb_common/src/config.rs',
+ 'pub static ref OVERWRITE_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = Default::default();',
+ `pub static ref OVERWRITE_LOCAL_SETTINGS: RwLock<HashMap<String, String>> = {
+        let mut settings = HashMap::new();
+        #[cfg(target_os = "android")]
+        settings.insert("disable-floating-window".to_owned(), "Y".to_owned());
+        RwLock::new(settings)
+    };`);
+patch('flutter/android/app/src/main/AndroidManifest.xml',
+ 'android:name=".FloatingWindowService"\n            android:enabled="true"',
+ 'android:name=".FloatingWindowService"\n            android:enabled="false"');

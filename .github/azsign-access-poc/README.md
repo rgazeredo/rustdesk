@@ -98,3 +98,16 @@ Verificação local: patches completos sobre tag fixada; análise Dart da págin
 compilado contra Android SDK 34; testes de prova, revogação, retry, expiração e
 renovação. Essas verificações não substituem compilar o APK nem conectar/controlar
 um aparelho real, reiniciar o box e repetir exclusão/recadastro entre empresas.
+
+
+### Sem janela flutuante
+
+A distribuição Android fixa `disable-floating-window=Y` pelo mecanismo nativo
+`OVERWRITE_LOCAL_SETTINGS`, prevalecendo sobre preferências de versões antigas.
+O serviço `FloatingWindowService` fica desabilitado no Manifest. A tela única não
+oferece opção para reativá-lo. `MainActivity.onStop` consulta a configuração fixa
+e não inicia a bolha; o compartilhamento não pede permissão para a bolha. Mantida
+`SYSTEM_ALERT_WINDOW`, pois o fluxo existente de inicialização após boot também
+a consulta. Captura, controle e notificação de serviço em primeiro plano continuam.
+Superfície adicional: inicialização da configuração local fixa em hbb_common e
+habilitação do serviço de overlay no Manifest, ambos restritos ao APK customizado.
