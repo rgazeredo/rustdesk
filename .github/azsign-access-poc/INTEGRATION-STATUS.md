@@ -189,3 +189,9 @@ protocolo azsign-remote. Backup do aplicativo 1.5.2 em
 Pacote e hashes em `azsign/output/artifacts/remote-1.5.3/verification.json`.
 Nenhum login ou conexão remota iniciado pelo agente. Solicitado ao usuário
 abrir o aplicativo e testar o DC400xx; sessão gráfica ainda não confirmada.
+
+Validação física concluída em 05/10/2026: o usuário confirmou acesso ao
+DC400xx (1293024870) com macOS 1.5.3 após consultar e informar a nova senha
+gerada pela recuperação no painel. Evidência: confirmação explícita do usuário,
+não automação de sessão pelo agente. Isso encerra a pendência de conexão
+gráfica desta recuperação/migração. Nenhuma senha foi coletada pelo agente.
