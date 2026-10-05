@@ -180,3 +180,12 @@ Verificação: 17 testes Flutter (incluindo recuperação, destino removido e fa
 do CMS) e dois testes Rust de aliases aprovados. Build macOS e validação física
 ainda em andamento ao registrar esta seção; não confundir testes com conexão
 gráfica homologada.
+
+Build macOS ARM64 1.5.3+71 finalizada: biblioteca Rust e app Flutter compilados,
+assinatura ad hoc deep/strict e DMG verificados. Instalado em
+`/Applications/AZSign Remote.app`, mesmo bundle ID com.azsign.remote.pilot e
+protocolo azsign-remote. Backup do aplicativo 1.5.2 em
+`azsign/output/artifacts/remote-1.5.3/previous-1.5.2/AZSign Remote.app`.
+Pacote e hashes em `azsign/output/artifacts/remote-1.5.3/verification.json`.
+Nenhum login ou conexão remota iniciado pelo agente. Solicitado ao usuário
+abrir o aplicativo e testar o DC400xx; sessão gráfica ainda não confirmada.
