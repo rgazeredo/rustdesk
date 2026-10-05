@@ -57,7 +57,7 @@ no checkout de entrada. A compilação Android real continua sendo obrigatória.
 ## Recuperação gerenciada e tela Android — implementação de 05/10/2026
 
 Branch `feat/azsign-device-recovery`, versão proposta `1.4.9-azsign-remote.24`
-(versionCode 4084). Build APK e homologação física ainda pendentes. O workflow
+(build-number 4084; versionCode efetivo ARMv7 5084). Build APK validado; homologação física pendente. O workflow
 aplica `recovery-apply.mjs` depois dos patches de acesso e de confirmação de senha,
 sempre na tag 1.4.9. Mantém applicationId e assinatura para atualizar preservando
 os dados privados; não desinstalar nem limpar dados para atualizar.
@@ -111,3 +111,12 @@ e não inicia a bolha; o compartilhamento não pede permissão para a bolha. Man
 a consulta. Captura, controle e notificação de serviço em primeiro plano continuam.
 Superfície adicional: inicialização da configuração local fixa em hbb_common e
 habilitação do serviço de overlay no Manifest, ambos restritos ao APK customizado.
+
+
+Build concluído em 05/10/2026: https://github.com/rgazeredo/rustdesk/actions/runs/37308355523
+(commit de código `a79692634d86488c8b37f9c8506bca475cf3d9b4`). APK ARMv7 de 27.177.344 bytes,
+SHA-256 `4a0f729ab566a6636f4c2763ba1ad942781325e54b57547a301bfa8416b840b6`.
+Assinatura verificada e igual à v22; package preservado `com.carriez.flutter_hbb`,
+label AZSign Remote, versão `1.4.9-azsign-remote.24`/5084. Manifest do artefato confirma
+FloatingWindowService desabilitado e MainService habilitado; ícone adaptativo aponta
+para a arte AZSign Remote. Nenhuma instalação ou teste físico realizado nesta etapa.
