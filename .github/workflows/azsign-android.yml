@@ -81,8 +81,8 @@ jobs:
       # ------------------------------------------------------------------
       - name: Aplicar configuração AZSign
         env:
-          HOST: rustdesk.azsign.com.br
-          RELAY: rustdesk.azsign.com.br:21117
+          HOST: remote.azsign.com.br
+          RELAY: remote.azsign.com.br:21117
           # Public key of the isolated pilot hbbs; do not inherit the legacy server secret.
           PUBKEY: '30ivI0w7PoqSe1l0F5pBXIOPg3pPB+4uAfVc2t940v0='
         run: |

@@ -11,6 +11,7 @@ patch('libs/hbb_common/Cargo.toml', 'default = []', 'default = []\nazsign-access
 patch('Cargo.toml', '[features]', '[features]\nazsign-access-poc = ["hbb_common/azsign-access-poc"]');
 patch('libs/hbb_common/src/lib.rs', 'pub mod socket_client;', '#[cfg(feature = "azsign-access-poc")]\npub mod azsign_access;\npub mod socket_client;');
 copyFileSync(join(import.meta.dirname, 'azsign_access.rs'), join(root, 'libs/hbb_common/src/azsign_access.rs'));
+copyFileSync(join(import.meta.dirname, 'azsign_domain_alias.rs'), join(root, 'libs/hbb_common/src/azsign_domain_alias.rs'));
 copyFileSync(join(import.meta.dirname, 'azsign_scope.rs'), join(root, 'libs/hbb_common/src/azsign_scope.rs'));
 patch('libs/hbb_common/src/lib.rs', 'pub mod azsign_access;', 'pub mod azsign_access;\n#[cfg(feature = "azsign-access-poc")]\npub mod azsign_scope;');
 // Keep gateway scope local to the relay task; no shared ConnectionMeta/IPC changes.

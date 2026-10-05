@@ -144,3 +144,33 @@ normal não aceita alteração de perfil silenciosa e transporte limita os desti
 ao perfil provisionado. Não mudar apenas o HOST do workflow. Endereço antigo
 permanece até concluir essa preparação, preservando as instalações existentes.
 Nenhum novo APK gerado/instalado a partir desta revisão de interface ainda.
+
+## Migração de domínio preparada — 05/10/2026
+
+Gateway Lightsail já apresenta certificado da mesma CA com SAN dos dois nomes,
+validado externamente em ambos nas portas 32116, 32117 e 32118. Validade até
+04/12/2026; nenhuma CA/chave do dispositivo foi trocada. DNS antigo e anúncio
+hbbs permanecem. CMS deve fixar perfis antigos antes de mudar defaults.
+
+Android reconhece somente o par exato rustdesk.azsign.com.br/remote.azsign.com.br
+como destinos lógicos equivalentes quando host E server_name do perfil pertencem
+ao mesmo par. Socket, SNI, CA, certificado e portas continuam derivados do perfil
+autenticado; não há conexão ao endereço recebido nem fallback direto. Instalações
+com outros domínios continuam exigindo correspondência exata. Workflow preparado
+com HOST/RELAY novos; perfil antigo continua funcionando na atualização do APK.
+
+Superfície de regressão: `azsign_access.rs` altera somente a validação de destino
+TCP/registro Android; `azsign_domain_alias.rs` contém a regra/testes isolados;
+`apply.mjs` copia esse módulo para hbb_common no build; workflow muda os nomes
+fixos. Caminho desktop não Android permanece exato; feature desligada não compila
+este transporte. Revisão de minimização: nenhuma mudança em TLS, portas, CA,
+Java renewal, permissões ou fallback. Dois testes Rust passaram em rustc 1.85,
+incluindo ambos os sentidos, outros tenants/domínios, IP, loopback e sufixos falsos.
+Suíte Java existente confirmou recusa de troca de perfil/CA durante renovação.
+Compilação completa e teste físico ficam para o próximo APK, ainda não gerado.
+
+Não ativar `RUSTDESK_ACCESS_DEVICE_GATEWAY_HOST/SERVER_NAME=remote.azsign.com.br`
+no CMS antes de implantar o snapshot de perfis e instalar este APK nos dispositivos
+que receberão novos cadastros/recuperações. APK v24 não contém os aliases. Manter
+o gateway global e anúncio hbbs antigos preserva os desktops atuais. Migração
+automática de identidades ativas não foi adicionada; elas renovam no perfil fixado.

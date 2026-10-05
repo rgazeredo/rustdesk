@@ -6,6 +6,17 @@ use std::{convert::TryFrom, path::PathBuf, sync::Arc};
 use tokio::net::TcpStream;
 use tokio_rustls::{TlsConnector, rustls::{self, ClientConfig, RootCertStore, pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName}}};
 
+#[cfg(target_os = "android")]
+#[path = "azsign_domain_alias.rs"]
+mod domain_alias;
+
+fn accepts_target(host: &str, profile: &Profile) -> bool {
+    #[cfg(target_os = "android")]
+    return domain_alias::accepts(host, &profile.host, &profile.server_name);
+    #[cfg(not(target_os = "android"))]
+    { host == profile.host || host == profile.server_name }
+}
+
 #[derive(Clone, Deserialize)]
 struct Profile { host: String, server_name: String, registration: u16, rendezvous: u16, relay: u16 }
 
@@ -127,7 +138,7 @@ pub async fn tcp(target: &str, milliseconds: u64) -> ResultType<crate::Stream> {
     // match the enrolled gateway and traverse TLS; no arbitrary local relay.
     let dir = directory()?;
     let profile = load_profile(&dir)?;
-    if host != profile.host && host != profile.server_name {
+    if !accepts_target(host, &profile) {
         bail!("PoC forbids direct/public TCP targets: {}", target);
     }
 
@@ -146,7 +157,7 @@ pub async fn udp(target: &str, milliseconds: u64) -> ResultType<(crate::udp::Fra
     let dir = directory()?;
     let profile = load_profile(&dir)?;
 
-    if host != profile.host && host != profile.server_name {
+    if !accepts_target(host, &profile) {
         bail!("PoC forbids direct/public UDP targets: {}", target);
     }
 
