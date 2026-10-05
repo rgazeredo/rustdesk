@@ -220,10 +220,11 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
 
   Future<void> _connect(AddressBookDevice device) async {
     final remoteId = device.remoteId;
-    if (remoteId != null) await _connectRemoteId(remoteId);
+    if (remoteId != null) await _connectRemoteId(remoteId, catalogDevice: device);
   }
 
-  Future<void> _connectRemoteId(String remoteId) async {
+  Future<void> _connectRemoteId(String remoteId,
+      {AddressBookDevice? catalogDevice}) async {
     final session = _session;
     if (session == null ||
         widget.onConnect == null) {
@@ -235,6 +236,24 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
       _error = null;
     });
     try {
+      if (catalogDevice != null) {
+        final catalogGeneration = ++_catalogGeneration;
+        final page = await _catalog.loadPage(
+            token: session.token,
+            page: _page?.pagination.currentPage ?? 1,
+            filter: AzsignAddressBookFilter(search: _search.text.trim()));
+        if (!mounted || generation != _generation ||
+            catalogGeneration != _catalogGeneration) return;
+        setState(() => _page = page);
+        final current = page.devices.where((item) =>
+            item.id == catalogDevice.id && item.tenantId == catalogDevice.tenantId);
+        if (current.length != 1 || current.single.remoteId == null ||
+            [RemoteTransportStatus.blocked, RemoteTransportStatus.revoked,
+              RemoteTransportStatus.unprovisioned].contains(current.single.remoteAccessStatus)) {
+          throw StateError('O vínculo mudou. Atualize a lista e selecione o player.');
+        }
+        remoteId = current.single.remoteId!;
+      }
       final profile = await _enrollment.provision(session.token);
       if (!mounted || generation != _generation) return;
       await widget.onConnect!(profile, remoteId);

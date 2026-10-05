@@ -146,3 +146,37 @@ Windows DPAPI/CSR/certificate tests and the full executable build run in
 `azsign-windows-pilot.yml`; compilation is not a claim of interactive Windows
 homologation. The portable ZIP is unsigned. Production, gateway and Android
 were not changed for this port.
+
+
+## 2026-10-05 — domínio duplo e catálogo após recuperação (1.5.3)
+
+Diagnóstico no DC400xx: Android v25 registrado no hbbs como 1293024870, captura
+e MainService ativos, política do gateway habilitada. Catálogo macOS aberto
+continuava conectando ao ID antigo 1865846518. O link atualizado do CMS usava
+o ID correto, mas o Android anunciava remote.azsign.com.br:21117; o desktop
+com perfil rustdesk.azsign.com.br recusava esse destino lógico. Gateway recebia
+apenas a ponta Android e fechava com pairing_timeout. Manter apenas o anúncio
+do hbbs no domínio antigo não foi suficiente: o cliente também informa relay.
+
+Correções restritas ao desktop autenticado: módulo de aliases do Android
+reutilizado, aceitando apenas o par exato de nomes AZSign quando host e SNI
+provisionados pertencem ao par. Socket, SNI, CA, certificado, portas e controles
+de sessão continuam derivados do perfil autenticado. Outros hosts/IP/loopback
+continuam recusados. Nenhum default ou perfil persistido no CMS foi alterado.
+
+Conectar pela lista recarrega a página atual do catálogo e resolve pelo UUID
+do player e tenant antes de provisionar/conectar. ID remoto não é reaproveitado
+se o cadastro desapareceu, mudou de empresa, perdeu o vínculo, foi bloqueado
+ou se o CMS falhou. Links do painel mantêm o fluxo existente.
+
+Superfície de regressão: azsign_access.rs altera validação do destino lógico
+TCP/UDP somente dentro da feature azsign-access-poc; apply.mjs copia o módulo
+novo para a build; azsign_desktop_page.dart revalida cliques do catálogo;
+pubspec.yaml identifica 1.5.3+71. Nenhuma assinatura compartilhada nem caminho
+sem a feature foi alterado. O submódulo já continha patches de transporte;
+nenhum bump de commit foi feito.
+
+Verificação: 17 testes Flutter (incluindo recuperação, destino removido e falha
+do CMS) e dois testes Rust de aliases aprovados. Build macOS e validação física
+ainda em andamento ao registrar esta seção; não confundir testes com conexão
+gráfica homologada.

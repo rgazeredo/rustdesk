@@ -21,6 +21,7 @@ patch('src/flutter_ffi.rs', '    if custom_client_config.is_empty() {', '    #[c
 if (!readFileSync(join(root, 'libs/hbb_common/src/lib.rs'), 'utf8').includes('pub mod azsign_access;'))
 patch('libs/hbb_common/src/lib.rs', 'pub mod socket_client;', '#[cfg(feature = "azsign-access-poc")]\npub mod azsign_access;\npub mod socket_client;');
 copyFileSync(join(import.meta.dirname, 'azsign_access.rs'), join(root, 'libs/hbb_common/src/azsign_access.rs'));
+copyFileSync(join(import.meta.dirname, 'azsign_domain_alias.rs'), join(root, 'libs/hbb_common/src/azsign_domain_alias.rs'));
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<crate::Stream> {', ') -> ResultType<crate::Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<Stream> {', ') -> ResultType<Stream> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::tcp(&target.to_string(), ms_timeout).await;');
 patch('libs/hbb_common/src/socket_client.rs', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {', ') -> ResultType<(FramedSocket, TargetAddr<\'static>)> {\n    #[cfg(feature = "azsign-access-poc")]\n    return crate::azsign_access::udp(target, ms_timeout).await;');
