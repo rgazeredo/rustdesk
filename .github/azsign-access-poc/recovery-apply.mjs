@@ -17,10 +17,7 @@ patch(java+'MainActivity.kt','            when (call.method) {',`            whe
                     try { result.success(AzsignRecoveryAndroid.status(applicationContext)) }
                     catch (_: Exception) { result.error("status_unavailable", "Estado indisponível", null) }
                 }
-                "azsign_device_password" -> {
-                    try { result.success(AzsignRecoveryAndroid.revealPassword(applicationContext)) }
-                    catch (_: Exception) { result.error("password_unavailable", "Senha indisponível", null) }
-                }`);
+`);
 copyFileSync(join(import.meta.dirname,'recovery-native.rs'),join(root,'src/azsign_recovery_native.rs'));
 patch('src/lib.rs','pub mod flutter_ffi;', 'pub mod flutter_ffi;\n#[cfg(target_os = "android")]\nmod azsign_recovery_native;');
 copyFileSync(join(import.meta.dirname,'device_page.dart'),join(root,'flutter/lib/mobile/pages/azsign_device_page.dart'));

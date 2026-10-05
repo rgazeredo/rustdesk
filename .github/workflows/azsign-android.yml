@@ -478,10 +478,12 @@ jobs:
           # Adaptive icons must also use the same artwork, not the upstream foreground.
           mkdir -p flutter/android/app/src/main/res/drawable-nodpi
           rsvg-convert -w 432 -h 432 pilot-support/.github/azsign-access-poc/azsign-remote.svg -o flutter/android/app/src/main/res/drawable-nodpi/azsign_remote.png
+          cp flutter/android/app/src/main/res/drawable-nodpi/azsign_remote.png flutter/assets/azsign-remote.png
           python3 - <<'PYICON'
           from pathlib import Path
+          Path('flutter/android/app/src/main/res/drawable/azsign_remote_foreground.xml').write_text('<inset xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/azsign_remote" android:inset="25%"/>')
           for path in Path('flutter/android/app/src/main/res/mipmap-anydpi-v26').glob('*.xml'):
-              path.write_text('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@android:color/white"/><foreground android:drawable="@drawable/azsign_remote"/></adaptive-icon>')
+              path.write_text('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@android:color/white"/><foreground android:drawable="@drawable/azsign_remote_foreground"/></adaptive-icon>')
           PYICON
 
       - name: Validar geração de identidade e prova de posse (sem chave no build)

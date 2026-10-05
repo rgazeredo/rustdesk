@@ -120,3 +120,27 @@ Assinatura verificada e igual à v22; package preservado `com.carriez.flutter_hb
 label AZSign Remote, versão `1.4.9-azsign-remote.24`/5084. Manifest do artefato confirma
 FloatingWindowService desabilitado e MainService habilitado; ícone adaptativo aponta
 para a arte AZSign Remote. Nenhuma instalação ou teste físico realizado nesta etapa.
+
+## Revisão de interface após teste físico da v24 — código preparado
+
+Usuário escolheu senha somente no painel. A tela passa a mostrar apenas ID,
+estado e botões para permissões de tela/controle ausentes. Não mostra senha,
+chave, servidores, proxy ou dados do vínculo. O canal local de revelação foi
+removido e o cache cifrado introduzido na v24 é descartado; o setter nativo já
+confirma persistência da senha RustDesk. ID usa `serverModel.fetchID()` a cada
+consulta (antes o polling existia somente na antiga ServerPage).
+
+Ícone adaptativo: inset nativo de 25% mantém o desenho dentro da área segura do
+launcher do DC400. A tela usa PNG renderizado do mesmo SVG, evitando a perda do
+símbolo principal causada pelo SVG aninhado no renderizador Flutter. Mesma marca,
+sem novo desenho. Os controles de iniciar/parar/revelar senha foram removidos;
+acionar uma permissão usa o fluxo nativo existente, sem desligar um serviço ativo.
+
+Novo domínio solicitado `remote.azsign.com.br` já resolve para 18.230.75.197 em
+05/10. Certificado TLS apresentado na porta 32116 ainda contém somente
+`DNS:rustdesk.azsign.com.br`. Migração precisa de certificado com ambos os nomes,
+configuração CMS/gateway e atualização coordenada dos perfis: renewal Android
+normal não aceita alteração de perfil silenciosa e transporte limita os destinos
+ao perfil provisionado. Não mudar apenas o HOST do workflow. Endereço antigo
+permanece até concluir essa preparação, preservando as instalações existentes.
+Nenhum novo APK gerado/instalado a partir desta revisão de interface ainda.
