@@ -174,3 +174,25 @@ no CMS antes de implantar o snapshot de perfis e instalar este APK nos dispositi
 que receberão novos cadastros/recuperações. APK v24 não contém os aliases. Manter
 o gateway global e anúncio hbbs antigos preserva os desktops atuais. Migração
 automática de identidades ativas não foi adicionada; elas renovam no perfil fixado.
+
+## v25 gerada e instalada — 05/10/2026
+
+Build https://github.com/rgazeredo/rustdesk/actions/runs/37346571257 concluído,
+fonte `ebde80914dcb23930380efecdb0b4ab95a925cf3`. APK versão
+`1.4.9-azsign-remote.25`/5085, 27.200.851 bytes, ARMv7; SHA256
+`eab7203b1d6266684de97530e148ccbbc724079e62810163356a0ee140dca79c`.
+Assinatura igual à v24. Manifest confirmou FloatingWindowService=false e
+MainService=true. Atualização `adb install -r` no DC400 192.168.0.82 concluída,
+identidade preservada. Tela mostra ID1.293.024.870, estado Aguardando autorização,
+somente permissão de tela pendente, sem configuração/senha exposta ou bolha.
+Screenshot/verification.json em azsign/output/artifacts/azsign-remote-v25/.
+
+CMS/migrations implantados, 13 perfis antigos preservados. Ativação do novo
+default e recuperação ainda NÃO executadas: revisão automática bloqueou a mudança
+pela divergência com cadastro DC400xx/AZTV já vinculado a outro ID remoto.
+Usuário pediu conduzir pessoalmente a autorização no painel. Não considerar
+sessão gráfica, recuperação ou conexão no novo perfil homologadas.
+Lista explícita CMS `RUSTDESK_ACCESS_DEVICE_GATEWAY_IDENTITY_IDS` foi adicionada
+para impedir que aparelhos não atualizados recebam o domínio novo.
+Superfície deste incremento Android: apenas versionamento no workflow, build e
+instalação; comportamento vem dos commits de UI/aliases descritos acima.
