@@ -21,6 +21,8 @@ execFileSync('javac', [
   join(import.meta.dirname, 'AzsignRenewalScheduler.java'),
   join(import.meta.dirname, 'AzsignRenewalHttp.java'),
   join(import.meta.dirname, 'AzsignRenewalRuntime.java'),
+  join(import.meta.dirname, 'AzsignRecovery.java'),
+  join(import.meta.dirname, 'RecoveryTest.java'),
   join(import.meta.dirname, 'RenewalHttpTest.java'),
   join(import.meta.dirname, 'RenewalRuntimeTest.java'),
   join(import.meta.dirname, 'RenewalClockTest.java'),
@@ -78,6 +80,12 @@ mkdirSync(runtimeFiles);
 cpSync(dir, join(runtimeFiles, 'azsign-access-poc'), {recursive: true});
 assert.equal(execFileSync('java', ['-cp', classpath, 'RenewalRuntimeTest', runtimeFiles], {encoding: 'utf8'}).trim(), 'runtime-verified');
 console.log('✓ Application runtime resumes enrollment from disk and prevents duplicate schedulers across restart');
+
+const recoveryFiles = join(work, 'recovery-files');
+mkdirSync(recoveryFiles);
+cpSync(dir, join(recoveryFiles, 'azsign-access-poc'), {recursive: true});
+assert.equal(execFileSync('java', ['-cp', classpath, 'com.carriez.flutter_hbb.RecoveryTest', join(recoveryFiles, 'azsign-access-poc'), id], {encoding: 'utf8'}).trim(), 'recovery-verified');
+console.log('✓ Recovery after revocation, encrypted password boundary, durable receipt retry and fail-closed password persistence');
 
 // 4. Issue renewed leaf cert (serial 2)
 openssl('x509', '-req', '-in', 'request.pem', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '2', '-days', '2', '-extfile', 'client.ext', '-out', 'renewed_client.pem');

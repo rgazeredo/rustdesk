@@ -87,6 +87,57 @@ public final class AzsignRenewalHttp implements AzsignRenewalScheduler.RenewalTr
         return bytes;
     }
 
+    JSONObject postRecovery(String operation, JSONObject body) throws Exception {
+        if (!operation.equals("challenge") && !operation.equals("exchange")) throw new SecurityException("Invalid operation");
+        HttpsURLConnection connection;
+        synchronized (this) {
+            if (cancelled) throw new InterruptedIOException("Renewal cancelled");
+            connection = connections.open(new URL(origin + "/api/v1/rustdesk-access/device-recovery/" + operation));
+            current = connection;
+        }
+        try {
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setUseCaches(false);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            byte[] bytes = body.toString().getBytes(StandardCharsets.UTF_8);
+            if (bytes.length > 32768) throw new IOException("Oversized renewal request");
+            connection.setFixedLengthStreamingMode(bytes.length);
+            try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
+            int status = connection.getResponseCode();
+            // A redirect must never forward the signed proof to another origin.
+            if (status >= 300 && status < 400) throw new IOException("CMS redirect refused");
+            String contentType = connection.getContentType();
+            if (contentType == null || !contentType.toLowerCase(Locale.ROOT).split(";", 2)[0].trim().equals("application/json")) {
+                throw new IOException("CMS did not return JSON");
+            }
+            InputStream stream = status == 200 ? connection.getInputStream() : connection.getErrorStream();
+            if (stream == null) throw new IOException("Empty CMS response");
+            JSONObject response;
+            try (InputStream input = stream; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[1024];
+                int count;
+                while ((count = input.read(buffer)) != -1) {
+                    if (output.size() + count > 32768) throw new IOException("Oversized CMS response");
+                    output.write(buffer, 0, count);
+                }
+                response = new JSONObject(new String(output.toByteArray(), StandardCharsets.UTF_8));
+            }
+            if (cancelled) throw new InterruptedIOException("Renewal cancelled");
+            String code = response.optString("code");
+            if (status == 423 && "temporarily_blocked".equals(code)) throw new AzsignRenewalScheduler.BlockedException("Temporarily blocked");
+            if (status != 200) throw new IOException("CMS renewal unavailable (HTTP " + status + ")");
+            return response;
+        } finally {
+            connection.disconnect();
+            synchronized (this) { if (current == connection) current = null; }
+        }
+    }
+
     private JSONObject post(String operation, JSONObject body, boolean authenticatedProof) throws Exception {
         HttpsURLConnection connection;
         synchronized (this) {
