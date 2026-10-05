@@ -591,7 +591,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.24 --build-number=4084
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.25 --build-number=4085
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
