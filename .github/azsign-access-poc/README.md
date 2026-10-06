@@ -218,3 +218,19 @@ ID persistido; workflow incrementa para .26/4086 (ARMv7: versionCode 5086).
 Sem mudança de desktop, CMS, gateway, certificados, formato de configuração ou
 submódulos. Suíte Java de renovação/recuperação aprovada localmente. Compilação
 e testes de reinicialização no box ainda pendentes neste registro.
+
+### Build e validação v26 concluídos
+
+Actions 37509708215 aprovado, fonte `7286be41e8620fb61c2cb2a5aedc4315a3ef00df`.
+APK `1.4.9-azsign-remote.26`, versionCode 5086, ARMv7, 27.200.846 bytes;
+SHA256 `680095b9efbe61373d945c39f393e290c90c90df1f7e8354a7dfbafdaa73138b`.
+Assinatura V1/V2 válida, mesmo certificado da v25. Instalado por atualização
+no DC400xx em 06/10/2026. ID 1851909274 preservado na atualização, em processo
+a frio com interface atrasada e em dois reboots completos. Cada leitura veio
+de nova publicação do ID, com PID diferente; certificado/expiração preservados,
+renovação SCHEDULED sem erros e captura ativa após os boots. O teste de force-stop
+removeu a habilitação de InputService no Android; ela foi restaurada preservando
+os demais serviços. Isso não constitui teste de sessão gráfica: cadastro ainda
+aponta a 1293024870 e exige reconciliação supervisionada. Canal de APK do CMS,
+servidor, vínculos e aplicativos da Store não foram alterados. Artefatos e
+evidências em `azsign/output/artifacts/azsign-remote-v26/`.
