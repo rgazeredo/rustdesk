@@ -52,9 +52,10 @@ try:
         requests=(out/'requests.txt').read_text() if (out/'requests.txt').exists() else ''
         if 'GET /api/v1/desktop/address-book' not in requests: raise RuntimeError('Catalog fixture was not loaded; inspect screenshot and TLS diagnostics')
         # Search field position verified against the first native catalog screenshot.
-        win32api.SetCursorPos((origin[0]+300,origin[1]+168))
+        win32api.SetCursorPos((origin[0]+300,origin[1]+196))
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)
+        time.sleep(.3)
         win32com.client.Dispatch('WScript.Shell').SendKeys('Vitrine')
         time.sleep(2)
         if 'search=Vitrine' not in (out/'requests.txt').read_text(): raise RuntimeError('Search did not reach fixture')
