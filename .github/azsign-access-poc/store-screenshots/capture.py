@@ -55,10 +55,17 @@ try:
         win32api.SetCursorPos((origin[0]+300,origin[1]+196))
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)
-        time.sleep(.3)
-        win32com.client.Dispatch('WScript.Shell').SendKeys('Vitrine')
-        time.sleep(2)
-        if 'search=Vitrine' not in (out/'requests.txt').read_text(): raise RuntimeError('Search did not reach fixture')
+        time.sleep(1)
+        keyboard=win32com.client.Dispatch('WScript.Shell')
+        for attempt in range(3):
+            keyboard.SendKeys('^a')
+            time.sleep(.3)
+            for character in 'vitrine':
+                keyboard.SendKeys(character)
+                time.sleep(.15)
+            time.sleep(2)
+            if 'search=vitrine' in (out/'requests.txt').read_text(): break
+        else: raise RuntimeError('Search did not reach fixture')
         win32api.SetCursorPos((1850,1020))
         ImageGrab.grab(bbox=rect).save(out/'03-busca.png')
 finally:
