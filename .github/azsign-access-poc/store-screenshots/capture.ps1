@@ -22,7 +22,7 @@ try {
     Write-Host 'Configuring isolated DNS and firewall'
     [IO.File]::AppendAllText($hosts,"`r`n127.0.0.1 app.azsign.com.br remote.azsign.com.br rustdesk.azsign.com.br`r`n")
     Clear-DnsClientCache
-    New-NetFirewallRule -DisplayName 'AZSign screenshot isolation' -Direction Outbound -Program $exe -Action Block -RemoteAddress @('0.0.0.0-126.255.255.255','128.0.0.0-255.255.255.255','::/0') | Out-Null
+    New-NetFirewallRule -DisplayName 'AZSign screenshot isolation' -Direction Outbound -Program $exe -Action Block -RemoteAddress Internet | Out-Null
     Write-Host 'Starting loopback fixture API'
     $server = Start-Process node -ArgumentList "$PSScriptRoot/server.cjs" -PassThru -RedirectStandardOutput store-screenshots/server-output.txt -RedirectStandardError store-screenshots/server-error.txt
     for ($i=0; $i -lt 40 -and !(Test-Path fixture-ready.txt); $i++) { Start-Sleep -Milliseconds 250 }
