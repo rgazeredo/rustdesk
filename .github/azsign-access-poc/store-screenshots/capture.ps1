@@ -28,8 +28,9 @@ try {
     "[options]`nlang = 'ptbr'`ntheme = 'light'" | Set-Content "$config/AZSignRemotePilot_local.toml" -Encoding UTF8
     python "$PSScriptRoot/capture.py" login
     if ($LASTEXITCODE -ne 0) { throw 'Login capture failed' }
-    & "$PSScriptRoot/../msix/native-probe.ps1" -LibraryDir $bundle -ResultPath store-screenshots/demo-seed.json -DeviceId $deviceId -Mode seed
-    & "$PSScriptRoot/../msix/native-probe.ps1" -LibraryDir $bundle -ResultPath store-screenshots/demo-write.json -DeviceId $deviceId -Mode write
+    & powershell -NoProfile -File "$PSScriptRoot/../msix/native-probe.ps1" -LibraryDir $bundle -ResultPath store-screenshots/demo-seed.json -DeviceId $deviceId -Mode seed
+    if ($LASTEXITCODE -ne 0) { throw 'Fixture identity failed' }
+    & powershell -NoProfile -File "$PSScriptRoot/../msix/native-probe.ps1" -LibraryDir $bundle -ResultPath store-screenshots/demo-write.json -DeviceId $deviceId -Mode write
     if ($LASTEXITCODE -ne 0) { throw 'Fixture storage failed' }
     python "$PSScriptRoot/capture.py" catalog
     if ($LASTEXITCODE -ne 0) { throw 'Catalog capture failed' }
