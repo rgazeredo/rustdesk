@@ -1,0 +1,37 @@
+name: AZSign Remote Store screenshots
+on:
+  push:
+    branches: [release/remote-store-screenshots-20261006]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  capture:
+    runs-on: windows-2022
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.16.0'
+      - name: Download verified release runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 37376782844 --repo rgazeredo/rustdesk --name AZSignRemote-windows-x64 --dir source
+          if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+          $hash = (Get-Content source/AZSignRemote-windows-x64.sha256 -Raw).Trim()
+          if ((Get-FileHash source/AZSignRemote-windows-x64.zip).Hash -ne $hash) { throw 'Runtime checksum mismatch' }
+          Expand-Archive source/AZSignRemote-windows-x64.zip bundle
+          if ((Get-Content bundle/BUILD-COMMIT.txt -Raw).Trim() -ne 'fb3d155675b8b25e69025af6a7188fa0444de101') { throw 'Unexpected runtime source' }
+      - name: Install screenshot tools
+        run: python -m pip install pillow==11.3.0 pywin32==311 pywinauto==0.6.9
+      - name: Capture unmodified Windows application
+        shell: powershell
+        run: ./.github/azsign-access-poc/store-screenshots/capture.ps1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: AZSign-Remote-Store-Screenshots
+          path: store-screenshots/**
+          retention-days: 14
