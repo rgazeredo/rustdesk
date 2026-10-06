@@ -196,3 +196,25 @@ Lista explícita CMS `RUSTDESK_ACCESS_DEVICE_GATEWAY_IDENTITY_IDS` foi adicionad
 para impedir que aparelhos não atualizados recebam o domínio novo.
 Superfície deste incremento Android: apenas versionamento no workflow, build e
 instalação; comportamento vem dos commits de UI/aliases descritos acima.
+
+## Android v26 — identidade estável na inicialização (06/10/2026)
+
+A recuperação iniciada em Application.onCreate pode consultar Config::get_id
+antes de MainService/Flutter definir APP_DIR. Config é lazy: a leitura antecipada
+carrega o caminho errado e pode gerar novo ID/par de chaves RustDesk, enquanto
+a identidade mTLS continua válida. Isso explica a separação entre certificado
+autorizado e endereço remoto desatualizado no catálogo.
+
+O JNI de recuperação agora retorna ID indisponível até APP_DIR apontar a uma
+pasta absoluta existente; não toca Config nessa fase. O worker permanece em
+WAITING_ID e retoma no ciclo seguinte, após a inicialização normal. O JNI de
+senha também recusa gravações antes dessa condição. Nenhum ID é forçado nem
+credencial apagada; aparelho já afetado exige reconciliar o vínculo atual pelo
+fluxo supervisionado existente, depois de validar a estabilidade.
+
+Superfície: recovery-native.rs altera somente as chamadas JNI da recuperação
+Android. RecoveryTest cobre espera sem requisições/gravações e retomada com o
+ID persistido; workflow incrementa para .26/4086 (ARMv7: versionCode 5086).
+Sem mudança de desktop, CMS, gateway, certificados, formato de configuração ou
+submódulos. Suíte Java de renovação/recuperação aprovada localmente. Compilação
+e testes de reinicialização no box ainda pendentes neste registro.

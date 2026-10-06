@@ -11,6 +11,33 @@ public class RecoveryTest {
         File dir = new File(args[0]);
         String id = args[1];
         JSONObject active = new JSONObject(new String(Files.readAllBytes(new File(dir,"active.json").toPath())));
+        // Recovery can run before MainService/Flutter has initialized Config.
+        // An unavailable ID must not issue a request, replace credentials or
+        // manufacture a new identity. A later tick resumes with the saved ID.
+        byte[] savedActive = Files.readAllBytes(new File(dir,"active.json").toPath());
+        byte[] savedKey = Files.readAllBytes(new File(dir,"identity/key.der").toPath());
+        final boolean[] configReady = {false};
+        final int[] requests = {0};
+        AzsignRecovery early = new AzsignRecovery(dir, new AzsignRecovery.Native() {
+            public String deviceId() { return configReady[0] ? "1465886383" : ""; }
+            public boolean setPassword(String value) { throw new AssertionError("Boot must not replace password"); }
+            public void restartTransport() { throw new AssertionError("Boot must not restart transport"); }
+        }, "https://cms.test");
+        AzsignRecovery.Transport waiting = (operation, body) -> {
+            requests[0]++;
+            if (operation.equals("challenge")) return new JSONObject().put("challenge", "A".repeat(43)).put("expires_in", 120);
+            check(body.getString("remote_id").equals("1465886383"), "Resume with persisted ID");
+            return new JSONObject().put("status", "waiting");
+        };
+        for (int i = 0; i < 3; i++) early.cycle(id, active, waiting);
+        check(requests[0] == 0 && early.status().getString("state").equals("WAITING_ID"), "Wait for native configuration before recovery");
+        configReady[0] = true;
+        early.cycle(id, active, waiting);
+        check(requests[0] == 2 && early.status().getString("state").equals("WAITING"), "Recovery resumes after configuration initialization");
+        check(java.util.Arrays.equals(savedActive, Files.readAllBytes(new File(dir,"active.json").toPath())), "Startup preserves certificate/profile");
+        check(java.util.Arrays.equals(savedKey, Files.readAllBytes(new File(dir,"identity/key.der").toPath())), "Startup preserves identity key");
+        check(!new File(dir,"recovery-pending.json").exists(), "Startup must not create recovery grant");
+        early.close();
         JSONObject authorized = new JSONObject(active.toString()).put("status","authorized")
             .put("grant_id","0199a000-0000-7000-8000-000000000099").put("password","abcdefghijklmnopqrstuv12");
         java.security.cert.X509Certificate leaf = (java.security.cert.X509Certificate) java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(active.getString("certificate_base64"))));
