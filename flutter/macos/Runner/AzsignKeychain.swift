@@ -3,7 +3,7 @@ import Security
 
 enum AzsignKeychain {
     static let service = "com.azsign.rustdesk.desktop"
-    static let allowedKeys: Set<String> = ["azsign_desktop_device_id", "azsign_desktop_access_token"]
+    static let allowedKeys: Set<String> = ["azsign_desktop_device_id", "azsign_desktop_access_token", "azsign_desktop_panel"]
 
     static func query(_ key: String) throws -> [String: Any] {
         guard allowedKeys.contains(key) else { throw failure(errSecParam) }

@@ -8,12 +8,21 @@ class AzsignNativeEnrollment {
   final AzsignHttp http;
   final MethodChannel channel;
   int _generation = 0;
+  Future<void> _nativeTail = Future.value();
+
+  Future<T?> _invoke<T>(String method, [Map<String, dynamic>? arguments]) {
+    final result = _nativeTail
+        .then((_) => azsignNativeInvoke<T>(channel, method, arguments));
+    _nativeTail = result.then<void>((_) {}, onError: (Object _) {});
+    return result;
+  }
+
   AzsignNativeEnrollment(this.http,
       {this.channel = const MethodChannel('org.rustdesk.rustdesk/host')});
 
   Future<void> clear() async {
     _generation++;
-    await azsignNativeInvoke<dynamic>(channel, 'azsignIdentityClear');
+    await _invoke<dynamic>('azsignIdentityClear');
   }
 
   Future<Map<String, dynamic>> provision(String token) async {
@@ -22,9 +31,7 @@ class AzsignNativeEnrollment {
       if (generation != _generation) throw StateError('Enrollment cancelled');
     }
 
-    if (await azsignNativeInvoke<bool>(
-            channel, 'azsignNativeTransportAvailable') !=
-        true) {
+    if (await _invoke<bool>('azsignNativeTransportAvailable') != true) {
       throw StateError('Build has no authenticated native transport');
     }
     current();
@@ -45,8 +52,8 @@ class AzsignNativeEnrollment {
         base64Decode(profile['server_public_key'] as String).length != 32) {
       throw const FormatException('Invalid enrollment profile');
     }
-    final prepared = await azsignNativeInvoke<dynamic>(
-        channel, 'azsignIdentityPrepare', {'identity_id': identity});
+    final prepared = await _invoke<dynamic>(
+        'azsignIdentityPrepare', {'identity_id': identity});
     current();
     if (prepared?['identity_id'] != identity) {
       throw StateError('Identity mismatch');
@@ -60,7 +67,7 @@ class AzsignNativeEnrollment {
         response.data['session_expires_at'] != profile['session_expires_at']) {
       throw const FormatException('Certificate session mismatch');
     }
-    await azsignNativeInvoke<dynamic>(channel, 'azsignIdentityInstall', {
+    await _invoke<dynamic>('azsignIdentityInstall', {
       ...profile,
       ...response.data,
     });

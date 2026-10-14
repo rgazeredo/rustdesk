@@ -42,7 +42,11 @@ class AzsignHttp {
     Map<String, dynamic>? body,
     Map<String, String>? query,
   }) async {
-    if (!path.startsWith('/api/v1/desktop/')) {
+    final discovery = method == 'POST' &&
+        token == null &&
+        origin.origin == 'https://app.azsign.com.br' &&
+        path == '/api/v1/box-manager/discover-installation';
+    if (!path.startsWith('/api/v1/desktop/') && !discovery) {
       throw ArgumentError('Not a desktop endpoint');
     }
     final request = await _client

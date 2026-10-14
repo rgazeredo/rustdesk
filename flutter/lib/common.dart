@@ -2262,7 +2262,10 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
         ((cmdArgs?.isNotEmpty ?? false) ? cmdArgs!.first : ''));
     if (candidate?.scheme == 'azsign-remote') {
       final remoteId = azsignRemoteIdFromLink(candidate!);
-      if (remoteId != null) azsignRequestedRemoteId.value = remoteId;
+      if (remoteId != null) {
+        azsignRequestedPanelDomain = candidate.queryParameters['panel'];
+        azsignRequestedRemoteId.value = remoteId;
+      }
       windowOnTop(null);
       return true;
     }

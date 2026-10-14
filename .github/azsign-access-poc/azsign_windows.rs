@@ -31,6 +31,7 @@ fn path(key: &str) -> Result<PathBuf> {
         ENROLLMENT,
         "azsign_desktop_device_id",
         "azsign_desktop_access_token",
+        "azsign_desktop_panel",
     ]
     .contains(&key)
     {

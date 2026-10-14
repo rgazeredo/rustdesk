@@ -8,15 +8,27 @@ import 'azsign_native_storage.dart';
 import 'azsign_native_enrollment.dart';
 import 'azsign_types.dart';
 import 'azsign_deep_link.dart';
+import 'azsign_panel_storage.dart';
 
 /// Pilot entry point. Public configuration is applied only after native enrollment.
 class AzsignDesktopPage extends StatefulWidget {
   final String cmsOrigin;
+  final String? panelDomain;
+  final String? panelName;
+  final AzsignSecureStorage? secureStorage;
+  final Future<void> Function()? onChangePanel;
   final AzsignHttp Function(Uri)? httpFactory;
   final Future<void> Function(Map<String, dynamic> profile, String remoteId)?
       onConnect;
   const AzsignDesktopPage(
-      {super.key, required this.cmsOrigin, this.onConnect, this.httpFactory});
+      {super.key,
+      required this.cmsOrigin,
+      this.onConnect,
+      this.httpFactory,
+      this.panelDomain,
+      this.panelName,
+      this.secureStorage,
+      this.onChangePanel});
   @override
   State<AzsignDesktopPage> createState() => _AzsignDesktopPageState();
 }
@@ -54,7 +66,8 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     _enrollment = AzsignNativeEnrollment(_http);
     _auth = AzsignAuthService(
         transport: AzsignHttpAuthTransport(_http),
-        secureStorage: AzsignNativeStorage());
+        secureStorage: AzsignPanelStorage(
+            widget.secureStorage ?? AzsignNativeStorage(), _http.origin));
     _catalog = AzsignAddressBookService(
         transport: AzsignHttpAddressBookTransport(_http));
     azsignRequestedRemoteId.addListener(_schedulePendingLink);
@@ -75,9 +88,23 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
   void _schedulePendingLink() {
     // Wait until restore/login/catalog continuations have settled their busy state.
     Timer.run(() {
-      if (!mounted || _busy || _session == null || widget.onConnect == null) return;
+      if (!mounted || _busy || _session == null || widget.onConnect == null)
+        return;
       final remoteId = azsignRequestedRemoteId.value;
       if (remoteId == null) return;
+      final requestedDomain = azsignRequestedPanelDomain ?? 'app.azsign.com.br';
+      azsignRequestedPanelDomain = null;
+      final currentDomain =
+          widget.panelDomain ?? Uri.parse(widget.cmsOrigin).host;
+      if (requestedDomain != currentDomain &&
+          !(requestedDomain == 'app.azsign.com.br' &&
+              Uri.parse(widget.cmsOrigin).origin ==
+                  'https://app.azsign.com.br')) {
+        azsignRequestedRemoteId.value = null;
+        setState(() => _error =
+            'Este link pertence ao painel $requestedDomain. Troque de painel e abra o link novamente.');
+        return;
+      }
       // Consume before enrollment: denial must not trigger an automatic retry loop.
       azsignRequestedRemoteId.value = null;
       unawaited(_connectRemoteId(remoteId));
@@ -189,7 +216,8 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     }
   }
 
-  Future<void> _logout() async {
+  Future<void> _logout({bool changePanel = false}) async {
+    azsignRequestedPanelDomain = null;
     azsignRequestedRemoteId.value = null;
     _searchTimer?.cancel();
     _search.clear();
@@ -208,6 +236,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
       } finally {
         await _auth.logout();
       }
+      if (changePanel && mounted) await widget.onChangePanel?.call();
     } catch (_) {
       if (mounted) {
         setState(() => _error =
@@ -220,14 +249,14 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
 
   Future<void> _connect(AddressBookDevice device) async {
     final remoteId = device.remoteId;
-    if (remoteId != null) await _connectRemoteId(remoteId, catalogDevice: device);
+    if (remoteId != null)
+      await _connectRemoteId(remoteId, catalogDevice: device);
   }
 
   Future<void> _connectRemoteId(String remoteId,
       {AddressBookDevice? catalogDevice}) async {
     final session = _session;
-    if (session == null ||
-        widget.onConnect == null) {
+    if (session == null || widget.onConnect == null) {
       return;
     }
     final generation = _generation;
@@ -242,15 +271,22 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
             token: session.token,
             page: _page?.pagination.currentPage ?? 1,
             filter: AzsignAddressBookFilter(search: _search.text.trim()));
-        if (!mounted || generation != _generation ||
+        if (!mounted ||
+            generation != _generation ||
             catalogGeneration != _catalogGeneration) return;
         setState(() => _page = page);
         final current = page.devices.where((item) =>
-            item.id == catalogDevice.id && item.tenantId == catalogDevice.tenantId);
-        if (current.length != 1 || current.single.remoteId == null ||
-            [RemoteTransportStatus.blocked, RemoteTransportStatus.revoked,
-              RemoteTransportStatus.unprovisioned].contains(current.single.remoteAccessStatus)) {
-          throw StateError('O vínculo mudou. Atualize a lista e selecione o player.');
+            item.id == catalogDevice.id &&
+            item.tenantId == catalogDevice.tenantId);
+        if (current.length != 1 ||
+            current.single.remoteId == null ||
+            [
+              RemoteTransportStatus.blocked,
+              RemoteTransportStatus.revoked,
+              RemoteTransportStatus.unprovisioned
+            ].contains(current.single.remoteAccessStatus)) {
+          throw StateError(
+              'O vínculo mudou. Atualize a lista e selecione o player.');
         }
         remoteId = current.single.remoteId!;
       }
@@ -278,8 +314,17 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
         padding: const EdgeInsets.all(24),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('Dispositivos AZSign',
+          Text(widget.panelName ?? 'Dispositivos AZSign',
               style: Theme.of(context).textTheme.headlineSmall),
+          Row(children: [
+            Expanded(
+                child: Text(
+                    widget.panelDomain ?? Uri.parse(widget.cmsOrigin).host)),
+            if (widget.onChangePanel != null)
+              TextButton(
+                  onPressed: _busy ? null : () => _logout(changePanel: true),
+                  child: const Text('Trocar painel')),
+          ]),
           const SizedBox(height: 12),
           if (session != null)
             Row(children: [
@@ -303,7 +348,10 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
                   'Confira este código no navegador: ${_request!.userCode}'),
             ElevatedButton(
                 onPressed: _busy ? null : _login,
-                child: const Text('Entrar com AZSign')),
+                child: Text(
+                    widget.panelName == null || widget.panelName == 'AZSign'
+                        ? 'Entrar com AZSign'
+                        : 'Entrar no painel')),
           ] else ...[
             const SizedBox(height: 12),
             const Text(

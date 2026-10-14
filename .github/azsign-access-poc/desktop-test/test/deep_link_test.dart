@@ -104,7 +104,7 @@ void main() {
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(
               body: AzsignDesktopPage(
-                  cmsOrigin: 'https://cms.example.test',
+                  cmsOrigin: 'https://app.azsign.com.br',
                   httpFactory: (_) => http,
                   onConnect: (_, id) async {
                     connections.add(id);
@@ -157,7 +157,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: AzsignDesktopPage(
-                cmsOrigin: 'https://cms.example.test',
+                cmsOrigin: 'https://app.azsign.com.br',
                 onConnect: (_, __) async {
                   connections++;
                 }))));
