@@ -1,18 +1,11 @@
-name: AZSign Windows pilot
+name: AZSign Remote 1.5.4 Windows
 on:
   workflow_dispatch:
-    inputs:
-      build_run_id:
-        description: 'Reuse compiled inputs from a verified run (packaging-only changes)'
-        required: false
-        type: string
-  push:
-    branches: [feat/azsign-desktop-windows]
 permissions:
-  contents: read
+  contents: write
   actions: read
 concurrency:
-  group: azsign-windows-pilot-${{ github.ref }}
+  group: azsign-windows-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   links:
@@ -33,9 +26,11 @@ jobs:
           flutter pub get --enforce-lockfile
           flutter test --no-pub
   windows:
-    if: ${{ !inputs.build_run_id }}
     runs-on: windows-2022
     timeout-minutes: 150
+    outputs:
+      release_id: ${{ steps.transfer.outputs.release_id }}
+      bundle_asset_id: ${{ steps.transfer.outputs.bundle_asset_id }}
     env:
       VCPKG_DEFAULT_TRIPLET: x64-windows-static
       VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
@@ -131,67 +126,42 @@ jobs:
       - name: Compile desktop
         working-directory: flutter
         run: flutter build windows --release --dart-define=AZSIGN_DESKTOP_CMS_ORIGIN=https://app.azsign.com.br
-      # Preserve expensive outputs before packaging. Re-run failed jobs can now
-      # retry packaging without rebuilding Rust, native dependencies or Flutter.
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: windows-build-inputs-not-for-distribution
-          path: |
-            flutter/build/windows/x64/runner/Release/**
-            target/release/dylib_virtual_display.dll
-          if-no-files-found: error
-          retention-days: 14
+      - name: Save compiled inputs in draft release
+        id: transfer
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DESKTOP_PRODUCT: remote
+          DESKTOP_VERSION: '1.5.4'
+        run: |
+          tar -czf windows-build-inputs.tar.gz flutter/build/windows/x64/runner/Release target/release/dylib_virtual_display.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Build archive failed' }
+          node .github/azsign-access-poc/desktop-artifacts.cjs upload-bundle windows-build-inputs.tar.gz
+          if ($LASTEXITCODE -ne 0) { throw 'Build upload failed' }
   package:
     needs: [windows, links]
-    if: ${{ always() && needs.links.result == 'success' && (needs.windows.result == 'success' || (inputs.build_run_id && needs.windows.result == 'skipped')) }}
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-      - name: Verify reused build provenance
+      - name: Record build provenance
         id: provenance
         shell: pwsh
+        run: '"sha=$env:GITHUB_SHA" >> $env:GITHUB_OUTPUT'
+      - name: Download compiled inputs
+        shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+          BUNDLE_ASSET_ID: ${{ needs.windows.outputs.bundle_asset_id }}
         run: |
-          $buildSha = $env:GITHUB_SHA
-          if ($env:BUILD_RUN_ID) {
-            if ($env:BUILD_RUN_ID -notmatch '^\d+$') { throw 'Invalid build run ID' }
-            $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN_ID" | ConvertFrom-Json
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot read source run' }
-            if ($run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $run.head_branch -ne 'feat/azsign-desktop-windows') { throw 'Unexpected source repository/branch' }
-            $jobs = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN_ID/jobs?per_page=100" | ConvertFrom-Json
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot read source jobs' }
-            foreach ($name in @('windows', 'links')) {
-              if (@($jobs.jobs | Where-Object { $_.name -eq $name -and $_.conclusion -eq 'success' }).Count -ne 1) { throw "Source job did not pass: $name" }
-            }
-            $buildSha = $run.head_sha
-            $changed = @(git diff --name-only $buildSha $env:GITHUB_SHA)
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot compare source commit' }
-            foreach ($path in $changed) {
-              $packagingOnly = @(
-                '.github/workflows/azsign-windows-pilot.yml',
-                '.github/azsign-access-poc/windows-installer.iss',
-                '.github/azsign-access-poc/package-desktop-windows.ps1',
-                '.github/azsign-access-poc/test-windows-installer.ps1',
-                '.github/azsign-access-poc/package-desktop-macos.sh',
-                '.github/azsign-access-poc/WINDOWS-PILOT.md',
-                '.github/azsign-access-poc/DESKTOP-DEEP-LINK.md'
-              )
-              if ($path -notin $packagingOnly) { throw "Rebuild required for changed input: $path" }
-            }
-          }
-          "sha=$buildSha" >> $env:GITHUB_OUTPUT
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: windows-build-inputs-not-for-distribution
-          path: compiled
-          run-id: ${{ inputs.build_run_id || github.run_id }}
-          github-token: ${{ github.token }}
-      - name: Package portable pilot
+          node .github/azsign-access-poc/desktop-artifacts.cjs download-bundle windows-build-inputs.tar.gz
+          if ($LASTEXITCODE -ne 0) { throw 'Build download failed' }
+          New-Item -ItemType Directory compiled -Force | Out-Null
+          tar -xzf windows-build-inputs.tar.gz -C compiled
+          if ($LASTEXITCODE -ne 0) { throw 'Build extraction failed' }
+      - name: Package portable desktop
         shell: pwsh
         env:
           BUILD_SHA: ${{ steps.provenance.outputs.sha }}
@@ -256,13 +226,13 @@ jobs:
           $installer = Get-ChildItem installer/AZSign-Remote-Setup-*-windows-x64.exe
           if (@($installer).Count -ne 1) { throw 'Expected one installer' }
           ./.github/azsign-access-poc/test-windows-installer.ps1 -Installer $installer.FullName -BundleDir compiled/flutter/build/windows/x64/runner/Release
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: AZSignRemote-windows-x64
-          path: |
-            AZSignRemote-windows-x64.zip
-            AZSignRemote-windows-x64.sha256
-            installer/AZSign-Remote-Setup-*-windows-x64.exe
-            installer/AZSign-Remote-Setup-*-windows-x64.exe.sha256
-          if-no-files-found: error
-          retention-days: 14
+      - name: Save verified installers
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.windows.outputs.release_id }}
+        run: |
+          New-Item -ItemType Directory release-output -Force | Out-Null
+          Copy-Item AZSignRemote-windows-x64.zip,AZSignRemote-windows-x64.sha256 release-output
+          node .github/azsign-access-poc/desktop-artifacts.cjs upload-results installer release-output
+          if ($LASTEXITCODE -ne 0) { throw 'Installer upload failed' }
