@@ -25,7 +25,7 @@ class MemoryStorage implements AzsignSecureStorage {
 class Discovery extends AzsignInstallationDiscovery {
   Future<AzsignInstallation> discover(String domain) async =>
       AzsignInstallation(
-          domain, 'ADS Tech LED', Uri.parse('https://api.partner.example'));
+          domain, 'AHS Tech LED', Uri.parse('https://api.partner.example'));
 }
 
 void main() {
@@ -55,7 +55,7 @@ void main() {
           'data': {
             'id': 'installation',
             'type': 'independent',
-            'name': 'ADS Tech LED',
+            'name': 'AHS Tech LED',
             'domain': 'panel.partner.example',
             'api_base_url': origin,
           }
@@ -148,7 +148,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'panel.partner.example');
     await tester.tap(find.text('Usar este painel'));
     await tester.pumpAndSettle();
-    expect(find.text('ADS Tech LED'), findsOneWidget);
+    expect(find.text('AHS Tech LED'), findsOneWidget);
     expect(calls.where((method) => method == 'azsignIdentityClear').length, 3);
     expect(jsonDecode(storage.values['azsign_desktop_panel']!)['origin'],
         'https://api.partner.example');
@@ -174,7 +174,7 @@ void main() {
     await tester.enterText(find.byType(TextField), 'panel.partner.example');
     await tester.tap(find.text('Usar este painel'));
     await tester.pumpAndSettle();
-    expect(find.text('ADS Tech LED'), findsNothing);
+    expect(find.text('AHS Tech LED'), findsNothing);
     expect(storage.values['azsign_desktop_panel'], isNull);
     expect(find.textContaining('Painel indisponível'), findsOneWidget);
   });
@@ -199,6 +199,6 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.textContaining('Não foi possível validar'), findsOneWidget);
-    expect(find.text('ADS Tech LED'), findsNothing);
+    expect(find.text('AHS Tech LED'), findsNothing);
   });
 }
