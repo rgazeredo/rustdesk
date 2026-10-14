@@ -8,16 +8,18 @@ function patch(file, old, value) {
   if (source.split(old).length !== 2) throw new Error(`Unexpected patch target: ${file}`);
   writeFileSync(path, source.replace(old, () => value));
 }
-patch('src/core_main.rs', '    let mut args = Vec::new();', '    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n    config::HARD_SETTINGS.write().ok()?.insert("conn-type".to_owned(), "outgoing".to_owned());\n    let mut args = Vec::new();');
 patch('libs/hbb_common/Cargo.toml', 'default = []', 'default = []\nazsign-access-poc = []');
-if (!readFileSync(join(root, 'libs/hbb_common/Cargo.toml'), 'utf8').includes('security-framework = "=2.10.0"'))
-patch('libs/hbb_common/Cargo.toml', '\n[dependencies]\n', '\n[target.\'cfg(target_os = "macos")\'.dependencies]\nsecurity-framework = "=2.10.0"\n\n[dependencies]\n');
 patch('Cargo.toml', '[features]', '[features]\nazsign-access-poc = ["hbb_common/azsign-access-poc"]');
-patch('src/lib.rs', 'mod keyboard;', 'mod keyboard;\n#[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n#[no_mangle]\npub extern "C" fn azsign_native_access_enabled() -> i32 { 1 }');
-patch('src/lib.rs', 'mod port_forward_mux;', 'mod port_forward_mux;\n#[cfg(all(target_os = "macos", feature = "azsign-access-poc", feature = "flutter"))]\n#[no_mangle]\npub extern "C" fn azsign_native_access_logout() { crate::flutter::sessions::close_all_sessions(); }');
-patch('src/flutter.rs', '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    pub fn close_all_sessions()', '    #[cfg(any(target_os = "android", target_os = "ios", all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    pub fn close_all_sessions()');
-patch('src/core_main.rs', '    crate::load_custom_client();', '    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n    { *config::APP_NAME.write().ok()? = "AZSignRemotePilot".to_owned(); }\n    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    crate::load_custom_client();');
-patch('src/flutter_ffi.rs', '    if custom_client_config.is_empty() {', '    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    if custom_client_config.is_empty() {');
+if (process.argv.includes('--desktop')) {
+  patch('src/core_main.rs', '    let mut args = Vec::new();', '    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n    config::HARD_SETTINGS.write().ok()?.insert("conn-type".to_owned(), "outgoing".to_owned());\n    let mut args = Vec::new();');
+  if (!readFileSync(join(root, 'libs/hbb_common/Cargo.toml'), 'utf8').includes('security-framework = "=2.10.0"'))
+  patch('libs/hbb_common/Cargo.toml', '\n[dependencies]\n', '\n[target.\'cfg(target_os = "macos")\'.dependencies]\nsecurity-framework = "=2.10.0"\n\n[dependencies]\n');
+  patch('src/lib.rs', 'mod keyboard;', 'mod keyboard;\n#[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n#[no_mangle]\npub extern "C" fn azsign_native_access_enabled() -> i32 { 1 }');
+  patch('src/lib.rs', 'mod port_forward_mux;', 'mod port_forward_mux;\n#[cfg(all(target_os = "macos", feature = "azsign-access-poc", feature = "flutter"))]\n#[no_mangle]\npub extern "C" fn azsign_native_access_logout() { crate::flutter::sessions::close_all_sessions(); }');
+  patch('src/flutter.rs', '    #[cfg(any(target_os = "android", target_os = "ios"))]\n    pub fn close_all_sessions()', '    #[cfg(any(target_os = "android", target_os = "ios", all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    pub fn close_all_sessions()');
+  patch('src/core_main.rs', '    crate::load_custom_client();', '    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc"))]\n    { *config::APP_NAME.write().ok()? = "AZSignRemotePilot".to_owned(); }\n    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    crate::load_custom_client();');
+  patch('src/flutter_ffi.rs', '    if custom_client_config.is_empty() {', '    #[cfg(not(all(any(target_os = "macos", target_os = "windows"), feature = "azsign-access-poc")))]\n    if custom_client_config.is_empty() {');
+}
 if (!readFileSync(join(root, 'libs/hbb_common/src/lib.rs'), 'utf8').includes('pub mod azsign_access;'))
 patch('libs/hbb_common/src/lib.rs', 'pub mod socket_client;', '#[cfg(feature = "azsign-access-poc")]\npub mod azsign_access;\npub mod socket_client;');
 copyFileSync(join(import.meta.dirname, 'azsign_access.rs'), join(root, 'libs/hbb_common/src/azsign_access.rs'));
