@@ -22,7 +22,8 @@ public final class RenewalTest {
         File dir = new File(args[1]);
         String identityId = args[2];
 
-        if ("test-success".equals(command) || "test-idempotent".equals(command) || "test-profile-change".equals(command) || "test-ca-change".equals(command) || "test-replay".equals(command)) {
+        if ("test-success".equals(command) || "test-recover-expired".equals(command) || "test-idempotent".equals(command) || "test-profile-change".equals(command) || "test-ca-change".equals(command) || "test-replay".equals(command)) {
+            boolean expectsSuccess = "test-success".equals(command) || "test-recover-expired".equals(command);
             byte[] before = Files.readAllBytes(new File(dir, "active.json").toPath());
             byte[] initialKey = Files.readAllBytes(new File(dir, "identity/key.der").toPath());
             byte[] renewedCert = Files.readAllBytes(new File(args[3]).toPath());
@@ -61,7 +62,7 @@ public final class RenewalTest {
             ScheduledExecutorService exec = Executors.newSingleThreadScheduledExecutor();
             try {
                 AzsignRenewalScheduler scheduler = new AzsignRenewalScheduler(dir, mockTransport, exec);
-                if (!scheduler.isRemoteTransportAuthorized()) throw new AssertionError("Should be authorized initially");
+                if (scheduler.isRemoteTransportAuthorized() == "test-recover-expired".equals(command)) throw new AssertionError("Unexpected initial authorization");
 
                 boolean ok;
                 try {
@@ -71,9 +72,9 @@ public final class RenewalTest {
                         System.out.println("idempotent-verified");
                         return;
                     }
-                    if (!"test-success".equals(command)) throw new AssertionError("Unsafe renewal accepted");
+                    if (!expectsSuccess) throw new AssertionError("Unsafe renewal accepted");
                 } catch (SecurityException rejected) {
-                    if ("test-success".equals(command)) throw rejected;
+                    if (expectsSuccess) throw rejected;
                     if (!Arrays.equals(before, Files.readAllBytes(new File(dir, "active.json").toPath()))) throw new AssertionError("Enrollment changed on rejection");
                     System.out.println("rejected-verified");
                     return;

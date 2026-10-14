@@ -23,6 +23,10 @@ import org.json.JSONObject;
  * - Supports clean lifecycle cancellation.
  */
 public final class AzsignRenewalScheduler {
+    public interface Clock { long now(); }
+    private final Clock clock;
+    private volatile String lastFailure = "";
+    private static final long CLOCK_RECHECK_MS = 60_000L;
 
     public enum State {
         IDLE,
@@ -98,7 +102,12 @@ public final class AzsignRenewalScheduler {
     }
 
     public AzsignRenewalScheduler(File directory, RenewalTransport transport, ScheduledExecutorService executor) {
+        this(directory, transport, executor, System::currentTimeMillis);
+    }
+
+    public AzsignRenewalScheduler(File directory, RenewalTransport transport, ScheduledExecutorService executor, Clock clock) {
         this.directory = directory;
+        this.clock = clock;
         this.identity = new AzsignAccessIdentity(directory);
         this.transport = transport;
         this.executor = executor;
@@ -145,6 +154,8 @@ public final class AzsignRenewalScheduler {
         return consecutiveFailures;
     }
 
+    public String getLastFailure() { return lastFailure; }
+
     /**
      * Determines whether remote transport is authorized based on active enrollment validity.
      * Returns false if certificate is missing, expired, or device is revoked.
@@ -184,7 +195,7 @@ public final class AzsignRenewalScheduler {
             byte[] certDer = Base64.getDecoder().decode(active.getString("certificate_base64"));
             X509Certificate cert = parseCertificate(certDer);
 
-            long now = System.currentTimeMillis();
+            long now = clock.now();
             long notBefore = cert.getNotBefore().getTime();
             long notAfter = cert.getNotAfter().getTime();
 
@@ -200,8 +211,18 @@ public final class AzsignRenewalScheduler {
             long delay = Math.max(0, renewalTarget - now);
 
             state.set(State.SCHEDULED);
-            scheduleExecution(delay);
+            // TV boxes may boot with an old wall clock, then jump forward after
+            // NTP. Executor delays use monotonic time: never sleep until a date
+            // computed from that stale clock without rechecking it.
+            if (delay > CLOCK_RECHECK_MS) {
+                if (scheduledTask != null) scheduledTask.cancel(false);
+                nextScheduledAttemptMs = now + CLOCK_RECHECK_MS;
+                scheduledTask = executor.schedule(this::evaluateAndSchedule, CLOCK_RECHECK_MS, TimeUnit.MILLISECONDS);
+            } else {
+                scheduleExecution(delay);
+            }
         } catch (Exception e) {
+            lastFailure = e.getClass().getSimpleName();
             state.set(State.FAILED_RETRYING);
             scheduleRetry();
         }
@@ -212,7 +233,7 @@ public final class AzsignRenewalScheduler {
         if (scheduledTask != null) {
             scheduledTask.cancel(false);
         }
-        nextScheduledAttemptMs = System.currentTimeMillis() + delayMs;
+        nextScheduledAttemptMs = clock.now() + delayMs;
         scheduledTask = executor.schedule(this::runRenewalCycle, delayMs, TimeUnit.MILLISECONDS);
     }
 
@@ -335,6 +356,7 @@ public final class AzsignRenewalScheduler {
 
         try {
             boolean changed = performRenewalNow();
+            lastFailure = "";
             // Reschedule next regular renewal based on the new certificate
             if (changed) evaluateAndSchedule();
             else scheduleExecution(60_000L); // Clock skew must not create a busy renewal loop.
@@ -348,6 +370,7 @@ public final class AzsignRenewalScheduler {
                 }
             }
         } catch (Exception error) {
+            lastFailure = error.getClass().getSimpleName();
             scheduleRetry();
         }
     }

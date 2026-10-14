@@ -93,6 +93,16 @@ public final class AzsignAccessIdentity {
         return java.util.Base64.getEncoder().encodeToString(signer.sign());
     }
 
+    public synchronized String signRecovery(String id, String phase, String grant, String remoteId, String challenge, byte[] csr) throws Exception {
+        StringBuilder digest = new StringBuilder();
+        for (byte b : MessageDigest.getInstance("SHA-256").digest(csr)) digest.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
+        String message = String.join("\n", "AZSIGN-DEVICE-RECOVERY-V1", id, phase, grant == null ? "-" : grant, remoteId, challenge, digest.toString());
+        Signature signer = Signature.getInstance("SHA256withRSA");
+        signer.initSign(load(id).getPrivate());
+        signer.update(message.getBytes(StandardCharsets.UTF_8));
+        return java.util.Base64.getEncoder().encodeToString(signer.sign());
+    }
+
     public X509Certificate verifyCertificate(String id, byte[] certificate, byte[] authority) throws Exception {
         KeyPair pair = load(id);
         CertificateFactory factory = CertificateFactory.getInstance("X.509");

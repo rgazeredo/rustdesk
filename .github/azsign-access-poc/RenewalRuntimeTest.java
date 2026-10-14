@@ -16,6 +16,9 @@ public final class RenewalRuntimeTest {
             AzsignRenewalRuntime.start(files);
             AzsignRenewalScheduler first = (AzsignRenewalScheduler) field.get(null);
             if (first == null || first.getState() != AzsignRenewalScheduler.State.SCHEDULED) throw new AssertionError("Startup did not resume certificate schedule");
+            org.json.JSONObject status = AzsignRenewalRuntime.status(files);
+            if (!status.getBoolean("enrolled") || !status.getBoolean("transport_authorized")) throw new AssertionError("Missing runtime diagnostics");
+            if (status.has("certificate_base64") || status.has("identity_id") || status.has("key") || status.has("renewal_origin")) throw new AssertionError("Diagnostics exposed enrollment material");
             AzsignRenewalRuntime.start(files);
             if (field.get(null) != first) throw new AssertionError("Duplicate scheduler");
             AzsignRenewalRuntime.stop();

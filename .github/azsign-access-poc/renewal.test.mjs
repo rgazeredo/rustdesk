@@ -21,8 +21,11 @@ execFileSync('javac', [
   join(import.meta.dirname, 'AzsignRenewalScheduler.java'),
   join(import.meta.dirname, 'AzsignRenewalHttp.java'),
   join(import.meta.dirname, 'AzsignRenewalRuntime.java'),
+  join(import.meta.dirname, 'AzsignRecovery.java'),
+  join(import.meta.dirname, 'RecoveryTest.java'),
   join(import.meta.dirname, 'RenewalHttpTest.java'),
   join(import.meta.dirname, 'RenewalRuntimeTest.java'),
+  join(import.meta.dirname, 'RenewalClockTest.java'),
   join(import.meta.dirname, 'RenewalTest.java')
 ]);
 
@@ -68,6 +71,8 @@ const activeJson = {
   expires_at: Date.now() + 86400000
 };
 writeFileSync(join(dir, 'active.json'), JSON.stringify(activeJson));
+assert.equal(execFileSync('java', ['-cp', classpath, 'RenewalClockTest', dir], {encoding: 'utf8'}).trim(), 'clock-verified');
+console.log('✓ Clock corrections after boot cannot defer renewal indefinitely');
 assert.equal(execFileSync('java', ['-cp', classpath, 'com.carriez.flutter_hbb.RenewalHttpTest', dir, id], {encoding: 'utf8'}).trim(), 'http-verified');
 console.log('✓ Real HTTP adapter: request shape, timeout, redirect refusal, bounded JSON, error classification and cancellation');
 const runtimeFiles = join(work, 'runtime-files');
@@ -75,6 +80,12 @@ mkdirSync(runtimeFiles);
 cpSync(dir, join(runtimeFiles, 'azsign-access-poc'), {recursive: true});
 assert.equal(execFileSync('java', ['-cp', classpath, 'RenewalRuntimeTest', runtimeFiles], {encoding: 'utf8'}).trim(), 'runtime-verified');
 console.log('✓ Application runtime resumes enrollment from disk and prevents duplicate schedulers across restart');
+
+const recoveryFiles = join(work, 'recovery-files');
+mkdirSync(recoveryFiles);
+cpSync(dir, join(recoveryFiles, 'azsign-access-poc'), {recursive: true});
+assert.equal(execFileSync('java', ['-cp', classpath, 'com.carriez.flutter_hbb.RecoveryTest', join(recoveryFiles, 'azsign-access-poc'), id], {encoding: 'utf8'}).trim(), 'recovery-verified');
+console.log('✓ Recovery after revocation, encrypted password boundary, durable receipt retry and fail-closed password persistence');
 
 // 4. Issue renewed leaf cert (serial 2)
 openssl('x509', '-req', '-in', 'request.pem', '-CA', 'ca.pem', '-CAkey', 'ca.key', '-set_serial', '2', '-days', '2', '-extfile', 'client.ext', '-out', 'renewed_client.pem');
@@ -141,5 +152,7 @@ writeFileSync(join(dir, 'active.json'), JSON.stringify(expiredActive));
 const res3 = java('test-expired', dir, id);
 assert.equal(res3.trim(), 'expired-verified');
 console.log('✓ Expired certificate fails closed: remote transport strictly unauthorized without public fallback');
+assert.equal(java('test-recover-expired', dir, id, join(work, 'renewed_client.der'), join(work, 'ca.der')).trim(), 'success-verified');
+console.log('✓ Expired certificate recovers with the same private key and identity');
 
 console.log('All autonomous renewal scheduler tests passed!');

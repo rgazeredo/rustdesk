@@ -22,12 +22,18 @@ public final class AzsignAccessPocProvider extends ContentProvider {
         int uid = Binder.getCallingUid();
         if (uid != 2000 && uid != 0) throw new SecurityException("ADB only");
         try {
+            if ("renewal-status".equals(method)) {
+                Bundle result = new Bundle();
+                result.putString("status", AzsignRenewalRuntime.status(getContext().getFilesDir()).toString());
+                return result;
+            }
             String id = AzsignAccessIdentity.identityId(arg);
             File dir = new File(getContext().getFilesDir(), "azsign-access-poc");
             AzsignAccessIdentity identity = new AzsignAccessIdentity(dir);
             Bundle result = new Bundle();
             result.putInt("protocol", 2);
             result.putInt("renewal_protocol", 1);
+            result.putInt("renewal_origin_protocol", 2);
             result.putString("identity_id", id);
             if ("prepare-identity".equals(method)) {
                 result.putString("csr_base64", Base64.encodeToString(identity.prepare(id), Base64.NO_WRAP));
@@ -53,6 +59,10 @@ public final class AzsignAccessPocProvider extends ContentProvider {
                 active.put("ca_base64", Base64.encodeToString(ca, Base64.NO_WRAP));
                 active.put("expires_at", leaf.getNotAfter().getTime());
                 String renewalOrigin = extras.getString("renewal_origin");
+                if (extras.containsKey("renewal_origin_base64")) {
+                    if (renewalOrigin != null) throw new IllegalArgumentException("Ambiguous renewal origin");
+                    renewalOrigin = new String(decode(extras.getString("renewal_origin_base64"), 300), StandardCharsets.UTF_8);
+                }
                 if (renewalOrigin != null) active.put("renewal_origin", AzsignRenewalHttp.validateOrigin(renewalOrigin));
                 AzsignRenewalRuntime.stop();
                 AtomicFile file = new AtomicFile(new File(dir, "active.json"));
