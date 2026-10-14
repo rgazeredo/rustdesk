@@ -1,0 +1,240 @@
+name: AZSign Remote 1.5.4 Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/remote-1.5.4-desktop]
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: azsign-windows-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  links:
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      # These widget tests mock macOS Keychain MethodChannel. Windows uses DLL/DPAPI,
+      # exercised separately by windows-test and the packaged executable below.
+      - name: Test managed links and login confirmation
+        working-directory: .github/azsign-access-poc/desktop-test
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter test --no-pub
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    outputs:
+      release_id: ${{ steps.transfer.outputs.release_id }}
+      bundle_asset_id: ${{ steps.transfer.outputs.bundle_asset_id }}
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static
+      VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+      CARGO_INCREMENTAL: '0'
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+      - name: Validate packaging inputs before compilation
+        shell: pwsh
+        run: |
+          foreach ($path in @('LICENCE', '.github/azsign-access-poc/WINDOWS-PILOT.md')) {
+            if (!(Test-Path $path -PathType Leaf)) { throw "Missing packaging input: $path" }
+          }
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: azsign-windows-x64
+          cache-on-failure: true
+          workspaces: |
+            . -> target
+            .github/azsign-access-poc/windows-test -> target
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+      - name: Apply authenticated transport
+        run: node .github/azsign-access-poc/apply.mjs . --desktop
+      - name: Test actual Windows DPAPI and enrollment implementation
+        run: cargo test --manifest-path .github/azsign-access-poc/windows-test/Cargo.toml --locked
+      - name: Patch Flutter SDK and resolve locked dependencies
+        shell: bash
+        run: |
+          SDK="$(dirname "$(dirname "$(which flutter)")")"
+          SDK_PATCH="$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+          # flutter-action can restore an SDK already patched by a prior run.
+          # Only skip an exact existing patch, never suppress a real conflict.
+          if git -C "$SDK" apply --reverse --check "$SDK_PATCH" 2>/dev/null; then
+            echo "Flutter dropdown patch already present in cached SDK"
+          else
+            git -C "$SDK" apply --check "$SDK_PATCH"
+            git -C "$SDK" apply "$SDK_PATCH"
+          fi
+          cd flutter
+          flutter pub get --enforce-lockfile
+      - name: Analyze AZSign desktop integration
+        working-directory: flutter
+        run: dart analyze lib/common/azsign/azsign_native_channel.dart lib/common/azsign/azsign_native_storage.dart lib/common/azsign/azsign_native_enrollment.dart
+      - name: Install verified RustDesk Windows engine
+        shell: pwsh
+        run: |
+          flutter precache --windows
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile engine.zip
+          $hash = (Get-FileHash engine.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e') { throw 'Unexpected RustDesk engine checksum' }
+          Expand-Archive engine.zip -DestinationPath verified-engine
+          Copy-Item verified-engine/* "$env:FLUTTER_ROOT/bin/cache/artifacts/engine/windows-x64-release/" -Force
+      - name: Generate bridge
+        shell: bash
+        run: |
+          cargo install cargo-expand --version 1.0.95 --locked
+          cargo install flutter_rust_bridge_codegen --version 1.80.1 --features uuid --locked
+          flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+      - name: Test initial Android directory and remote file navigation
+        working-directory: flutter
+        run: flutter test --no-pub test/initial_file_directory_test.dart test/file_model_test.dart
+      - uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+          doNotCache: false
+      - name: Install native dependencies
+        shell: bash
+        run: "$VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root=\"$VCPKG_ROOT/installed\""
+      - name: Compile native authenticated client
+        # The virtual-display wrapper loads this workspace member dynamically;
+        # compiling only the root library does not produce its companion DLL.
+        run: cargo build --locked --release --lib -p rustdesk -p dylib_virtual_display --features rustdesk/flutter,rustdesk/azsign-access-poc
+      - name: Verify native build outputs
+        shell: pwsh
+        run: |
+          foreach ($dll in @('librustdesk.dll', 'dylib_virtual_display.dll')) {
+            $path = "target/release/$dll"
+            if (!(Test-Path $path -PathType Leaf) -or (Get-Item $path).Length -eq 0) {
+              throw "Missing native build output: $path"
+            }
+          }
+      - name: Compile desktop
+        working-directory: flutter
+        run: flutter build windows --release --dart-define=AZSIGN_DESKTOP_CMS_ORIGIN=https://app.azsign.com.br
+      - name: Save compiled inputs in draft release
+        id: transfer
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DESKTOP_PRODUCT: remote
+          DESKTOP_VERSION: '1.5.4'
+        run: |
+          tar -czf windows-build-inputs.tar.gz flutter/build/windows/x64/runner/Release target/release/dylib_virtual_display.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Build archive failed' }
+          node .github/azsign-access-poc/desktop-artifacts.cjs upload-bundle windows-build-inputs.tar.gz
+          if ($LASTEXITCODE -ne 0) { throw 'Build upload failed' }
+  package:
+    needs: [windows, links]
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+      - name: Record build provenance
+        id: provenance
+        shell: pwsh
+        run: '"sha=$env:GITHUB_SHA" >> $env:GITHUB_OUTPUT'
+      - name: Download compiled inputs
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BUNDLE_ASSET_ID: ${{ needs.windows.outputs.bundle_asset_id }}
+        run: |
+          node .github/azsign-access-poc/desktop-artifacts.cjs download-bundle windows-build-inputs.tar.gz
+          if ($LASTEXITCODE -ne 0) { throw 'Build download failed' }
+          New-Item -ItemType Directory compiled -Force | Out-Null
+          tar -xzf windows-build-inputs.tar.gz -C compiled
+          if ($LASTEXITCODE -ne 0) { throw 'Build extraction failed' }
+      - name: Package portable desktop
+        shell: pwsh
+        env:
+          BUILD_SHA: ${{ steps.provenance.outputs.sha }}
+        run: |
+          $bundle = 'compiled/flutter/build/windows/x64/runner/Release'
+          if (!(Test-Path "$bundle/rustdesk.exe")) { throw 'Missing desktop binary' }
+          Copy-Item compiled/target/release/dylib_virtual_display.dll $bundle
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -property installationPath
+          $crt = Get-ChildItem "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$crt) { throw 'Missing x64 Visual C++ redistributable directory' }
+          Copy-Item "$($crt.FullName)/*.dll" $bundle
+          Copy-Item LICENCE "$bundle/LICENSE-RustDesk.txt"
+          Copy-Item .github/azsign-access-poc/WINDOWS-PILOT.md "$bundle/LEIA-ME.md"
+          $env:BUILD_SHA | Set-Content "$bundle/BUILD-COMMIT.txt"
+          Rename-Item "$bundle/rustdesk.exe" 'AZSign Remote.exe'
+          $probe = Start-Process -FilePath "$bundle/AZSign Remote.exe" -ArgumentList '--version' -PassThru
+          if (!$probe.WaitForExit(30000)) { $probe.Kill(); throw 'Native loader smoke test timed out' }
+          if ($probe.ExitCode -ne 0) { throw "Native loader failed: $($probe.ExitCode)" }
+          $exe = (Resolve-Path "$bundle/AZSign Remote.exe").Path
+          $app = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            if ($app.HasExited) { throw 'AZSign Remote exited during startup' }
+            $protocol = 'HKCU:\Software\Classes\azsign-remote'
+            if ((Get-Item $protocol).GetValue('URL Protocol') -ne '') { throw 'Missing URL Protocol marker' }
+            $command = (Get-Item "$protocol\shell\open\command").GetValue('')
+            if ($command -ne ('"' + $exe + '" "%1"')) { throw "Unexpected protocol command: $command" }
+            $before = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe })
+            $before | Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
+            Start-Process 'azsign-remote://connection/new/123456789'
+            Start-Sleep -Seconds 5
+            $after = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $exe })
+            $after | Select-Object ProcessId, ParentProcessId, CommandLine | Format-List
+            $app.Refresh()
+            if ($app.HasExited) { throw 'Original application exited during link dispatch' }
+            # Native helper processes are not additional desktop windows.
+            $windows = @(Get-Process | Where-Object { $_.Path -eq $exe -and $_.MainWindowHandle -ne 0 })
+            $windows | Select-Object Id, MainWindowTitle | Format-List
+            if ($windows.Count -ne 1 -or $windows[0].Id -ne $app.Id) { throw 'Link did not reuse the original desktop window' }
+            $newProcesses = @($after | Where-Object { $_.ProcessId -notin $before.ProcessId })
+            if ($newProcesses.Count -ne 0) { throw 'Link left a second application process running' }
+            Write-Output 'Protocol registration, quoted executable path and warm-link dispatch passed.'
+          } catch {
+            Write-Host "Protocol validation failed: $_"
+            throw
+          } finally {
+            # Stop by PID; pipeline Process objects can race with process exit.
+            $appProcesses = @(Get-Process | Where-Object { $_.Path -eq $exe })
+            foreach ($appProcess in $appProcesses) {
+              Stop-Process -Id $appProcess.Id -Force -ErrorAction Continue
+            }
+          }
+          Compress-Archive -Path "$bundle/*" -DestinationPath AZSignRemote-windows-x64.zip
+          (Get-FileHash AZSignRemote-windows-x64.zip -Algorithm SHA256).Hash | Set-Content AZSignRemote-windows-x64.sha256
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./.github/azsign-access-poc/package-desktop-windows.ps1 -BundleDir compiled/flutter/build/windows/x64/runner/Release -OutputDir installer
+      - name: Test installation, repair and uninstall
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem installer/AZSign-Remote-Setup-*-windows-x64.exe
+          if (@($installer).Count -ne 1) { throw 'Expected one installer' }
+          ./.github/azsign-access-poc/test-windows-installer.ps1 -Installer $installer.FullName -BundleDir compiled/flutter/build/windows/x64/runner/Release
+      - name: Save verified installers
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.windows.outputs.release_id }}
+        run: |
+          New-Item -ItemType Directory release-output -Force | Out-Null
+          Copy-Item AZSignRemote-windows-x64.zip,AZSignRemote-windows-x64.sha256 release-output
+          node .github/azsign-access-poc/desktop-artifacts.cjs upload-results installer release-output
+          if ($LASTEXITCODE -ne 0) { throw 'Installer upload failed' }
