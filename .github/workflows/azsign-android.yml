@@ -449,6 +449,10 @@ jobs:
             .github/azsign-password-confirmation
             .github/azsign-access-poc
             .github/azsign-dpad
+            .github/azsign-capture-lifecycle
+
+      - name: Proteger leitura de quadros durante encerramento da captura
+        run: python3 pilot-support/.github/azsign-capture-lifecycle/apply.py .
 
       - name: Aplicar protótipo MCD-125 (opt-in)
         run: python3 pilot-support/.github/azsign-root-input/apply.py
@@ -591,7 +595,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.27 --build-number=4087
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.28 --build-number=4088
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
