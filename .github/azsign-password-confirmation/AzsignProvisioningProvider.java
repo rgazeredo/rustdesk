@@ -9,11 +9,35 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Process;
 import android.content.SharedPreferences;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 
-/** ADB-only receipt, never a password/hash export or a remotely writable API. */
+/**
+ * ADB-only receipt and device ID, never a password/hash export or a remotely
+ * writable API. The ID is the public RustDesk address already published to
+ * azsign-rustdesk-id.txt; this route exists because Android 11+ denies the
+ * shell read of Android/data, while the app itself can always read it.
+ */
 public final class AzsignProvisioningProvider extends ContentProvider {
     private static final String PREFS = "azsign-provisioning";
     private static final long TTL = 300000L;
+    private static final String ID_FILE = "azsign-rustdesk-id.txt";
+    private static final String ID_PATTERN = "[A-Za-z0-9_-]{6,32}";
+
+    private String readDeviceId() {
+        File dir = getContext().getExternalFilesDir(null);
+        if (dir == null) return null;
+        File file = new File(dir, ID_FILE);
+        if (!file.isFile() || file.length() > 64) return null;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String id = reader.readLine();
+            id = id == null ? null : id.trim();
+            return id != null && id.matches(ID_PATTERN) ? id : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     public static boolean record(Context context, String id, boolean persisted) {
         if (id == null || !id.matches("[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}")) return false;
@@ -29,8 +53,15 @@ public final class AzsignProvisioningProvider extends ContentProvider {
         int uid = Binder.getCallingUid();
         if (uid != 2000 && uid != 0 && uid != Process.myUid()) throw new SecurityException("ADB only");
         if ("/capabilities".equals(uri.getPath())) {
-            MatrixCursor cursor = new MatrixCursor(new String[]{"protocol"});
-            cursor.addRow(new Object[]{1});
+            // protocol stays 1: Setup matches `protocol=1`; device_id is additive.
+            MatrixCursor cursor = new MatrixCursor(new String[]{"protocol", "device_id"});
+            cursor.addRow(new Object[]{1, 1});
+            return cursor;
+        }
+        if ("/device-id".equals(uri.getPath())) {
+            String deviceId = readDeviceId();
+            MatrixCursor cursor = new MatrixCursor(new String[]{"protocol", "status", "device_id"});
+            cursor.addRow(new Object[]{1, deviceId == null ? "pending" : "ready", deviceId == null ? "" : deviceId});
             return cursor;
         }
         if (uri.getPathSegments().size() != 2 || !"password".equals(uri.getPathSegments().get(0))) {
