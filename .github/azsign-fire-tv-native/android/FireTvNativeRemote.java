@@ -73,6 +73,7 @@ public final class FireTvNativeRemote {
     }
     private void checkNow() throws Exception {
         if (session == null) throw new IllegalStateException("Pairing required");
+        boolean started = !activated;
         ensureService();
         phase = "status";
         JSONObject status;
@@ -81,6 +82,7 @@ public final class FireTvNativeRemote {
             try { status = new JSONObject(session.transport.request("/v1/FireTV/status", null, session.token)); break; }
             catch (java.net.SocketException error) {
                 if (SystemClock.elapsedRealtime() >= deadline) throw error;
+                if (!started) { activated = false; ensureService(); started = true; phase = "status"; }
                 Thread.sleep(250);
             }
         }
@@ -102,18 +104,22 @@ public final class FireTvNativeRemote {
         submit(() -> {
             inputEpoch.incrementAndGet(); ready = false; pendingCertificate = null; pendingUntil = 0;
             try {
+                boolean started = !activated;
                 ensureService();
                 phase = "certificate";
-                byte[] certificate = store.certificate();
-                if (certificate == null) {
-                    long deadline = SystemClock.elapsedRealtime() + 6000;
-                    while (true) {
-                        try { certificate = FireTvTransport.discoverCertificate(); break; }
-                        catch (java.net.SocketException error) {
-                            if (SystemClock.elapsedRealtime() >= deadline) throw error;
-                            Thread.sleep(250);
-                        }
+                byte[] saved = store.certificate();
+                byte[] certificate;
+                long deadline = SystemClock.elapsedRealtime() + 6000;
+                while (true) {
+                    try { certificate = FireTvTransport.discoverCertificate(); break; }
+                    catch (java.net.SocketException error) {
+                        if (SystemClock.elapsedRealtime() >= deadline) throw error;
+                        if (!started) { activated = false; ensureService(); started = true; phase = "certificate"; }
+                        Thread.sleep(250);
                     }
+                }
+                if (saved != null && !java.security.MessageDigest.isEqual(saved, certificate)) {
+                    throw new javax.net.ssl.SSLException("Receiver identity changed");
                 }
                 phase = "pin-display";
                 FireTvTransport transport = new FireTvTransport(certificate);
@@ -175,7 +181,10 @@ public final class FireTvNativeRemote {
                 if (epoch != inputEpoch.get()) return;
                 if (pendingCertificate != null && SystemClock.elapsedRealtime() > pendingUntil) { pendingCertificate = null; pendingUntil = 0; }
                 if (session == null || pendingCertificate != null) { message = "Conclua o pareamento desta Fire TV"; return; }
-                if (!ready) checkNow();
+                // Fire OS may kill the cached native receiver between sessions.
+                // Recover only via a read-only authenticated status BEFORE input;
+                // never replay a key or a PIN after an ambiguous response.
+                checkNow();
                 Session current = session;
                 if (current == null) return;
                 phase = "input";

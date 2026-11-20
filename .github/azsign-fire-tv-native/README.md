@@ -84,3 +84,10 @@ The TV also replaced its factory receiver certificate with a newly issued
 Amazon subordinate certificate; a fresh PIN pairing confirmed that identity.
 That newer certificate and probe credential survived a DIAL service restart.
 Integrated pairing, actual Remote input and full reboot remain pending.
+
+ApplicationExitInfo subsequently confirmed native receiver exits for LOW_MEMORY
+while cached (importance 400). v32 checks authenticated status before each input,
+reactivates DIAL at most once per bounded read-only recovery and validates status
+again before sending a key. No key or PIN request is replayed. The pairing
+bootstrap likewise retries read-only discovery and verifies any stored pin
+before issuing a new PIN display. No memory policy or package was changed.
