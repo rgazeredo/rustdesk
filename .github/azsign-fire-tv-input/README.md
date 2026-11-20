@@ -28,6 +28,8 @@ settings card returned true, CLICK returned false, global DPAD_CENTER false.
 The earlier 16-node read was the AZSign canvas, not Settings. The native
 accessibility candidate therefore does NOT establish functional control and
 must not be described as a solution. The separately validated native Fire TV protocol now supplies Select and D-pad
-in the v31 integration (`../azsign-fire-tv-native`). Apply both patches together;
-the accessibility patch alone remains insufficient. Do not describe the
-integration as homologated until integrated APK and reboot validation pass.
+in the v32 integration (`../azsign-fire-tv-native`). Apply both patches together;
+the accessibility patch alone remains insufficient. The signed v32 integration was subsequently installed and paired. The user
+confirmed mouse, arrows and Enter before and after a full reboot, and APK logs
+recorded native selection/navigation. This validation is scoped to the exact
+AFTHY7ABBA/API30 gate; onboarding PIN entry in QA used explicitly authorized ADB.
