@@ -49,6 +49,23 @@ replace(native + 'AzsignProvisioningProvider.java', '        if ("/device-id".eq
             return cursor;
         }
         if ("/device-id".equals(uri.getPath())) {''')
+replace(native + 'AzsignProvisioningProvider.java', 'new String[]{"protocol", "device_id"}', 'new String[]{"protocol", "device_id", "fire_tv_setup"}')
+replace(native + 'AzsignProvisioningProvider.java', 'new Object[]{1, 1}', 'new Object[]{1, 1, 1}')
+replace(native + 'AzsignProvisioningProvider.java', '    @Override public String getType(Uri uri)', """    private void requireSetupCaller() {
+        int uid = Binder.getCallingUid();
+        if (uid != 2000 && uid != 0 && uid != Process.myUid()) throw new SecurityException("ADB only");
+    }
+    @Override public android.os.Bundle call(String method, String arg, android.os.Bundle extras) {
+        requireSetupCaller();
+        return FireTvSetupProvisioning.call(getContext(), method, arg);
+    }
+    @Override public android.os.ParcelFileDescriptor openFile(Uri uri, String mode) throws java.io.FileNotFoundException {
+        requireSetupCaller();
+        if (uri.getPathSegments().size() != 2 || !"fire-tv-pin".equals(uri.getPathSegments().get(0))) throw new java.io.FileNotFoundException("Unsupported setup input");
+        try { return FireTvSetupProvisioning.openPin(getContext(), uri.getLastPathSegment(), mode); }
+        catch (java.io.IOException error) { throw new java.io.FileNotFoundException("Setup input unavailable"); }
+    }
+    @Override public String getType(Uri uri)""")
 page = 'flutter/lib/mobile/pages/azsign_device_page.dart'
 replace(page, '  Map<String, dynamic> _status = {};', '  Map<String, dynamic> _status = {};\n  Map<String, dynamic> _fireTv = {};')
 replace(page, "      final raw = await platformFFI.invokeMethod('azsign_device_status');", "      final raw = await platformFFI.invokeMethod('azsign_device_status');\n      final fireRaw = await platformFFI.invokeMethod('azsign_fire_tv_status');")

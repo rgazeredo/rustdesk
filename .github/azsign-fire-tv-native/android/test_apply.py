@@ -12,7 +12,7 @@ BASELINE = {
         Log.d(logTag, "onKeyEvent $keyEvent textToCommit:$textToCommit")
 ''',
     NATIVE + 'MainActivity.kt': '            when (call.method) {',
-    NATIVE + 'AzsignProvisioningProvider.java': '        if ("/device-id".equals(uri.getPath())) {',
+    NATIVE + 'AzsignProvisioningProvider.java': '\n'.join(['        if ("/device-id".equals(uri.getPath())) {', 'new String[]{"protocol", "device_id"}', 'new Object[]{1, 1}', '    @Override public String getType(Uri uri)']),
     'flutter/android/app/src/main/AndroidManifest.xml': '<manifest><application></application></manifest>',
     'flutter/lib/mobile/pages/azsign_device_page.dart': '''  Map<String, dynamic> _status = {};
       final raw = await platformFFI.invokeMethod('azsign_device_status');
