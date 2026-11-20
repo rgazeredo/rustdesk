@@ -527,11 +527,11 @@ jobs:
           export BC_TEST_DEPS="$RUNNER_TEMP/azsign-bc-test"
           mkdir -p "$BC_TEST_DEPS"
           for artifact in bcpkix bcprov bcutil; do
-            curl --fail --silent --show-error --location \
+            curl --fail --silent --show-error --location --retry 4 --retry-delay 15 --retry-max-time 120 --max-time 45 \
               "https://repo.maven.apache.org/maven2/org/bouncycastle/${artifact}-jdk15to18/1.86/${artifact}-jdk15to18-1.86.jar" \
               -o "$BC_TEST_DEPS/${artifact}.jar"
           done
-          curl --fail --silent --show-error --location \
+          curl --fail --silent --show-error --location --retry 4 --retry-delay 15 --retry-max-time 120 --max-time 45 \
             "https://repo.maven.apache.org/maven2/org/json/json/20180813/json-20180813.jar" \
             -o "$BC_TEST_DEPS/json.jar"
           node pilot-support/.github/azsign-access-poc/identity.test.mjs
