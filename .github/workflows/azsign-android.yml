@@ -444,6 +444,7 @@ jobs:
           path: pilot-support
           sparse-checkout: |
             .github/azsign-root-input
+            .github/azsign-fire-tv-input
             .github/azsign-aquario-input
             .github/azsign-smartpro-input
             .github/azsign-password-confirmation
@@ -508,6 +509,9 @@ jobs:
 
       - name: Aplicar navegação D-pad por acessibilidade (sem root)
         run: node pilot-support/.github/azsign-dpad/apply.mjs .
+
+      - name: Fire TV AFTHY7ABBA accessibility input
+        run: python3 pilot-support/.github/azsign-fire-tv-input/apply.py .
 
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
@@ -595,7 +599,7 @@ jobs:
           cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.29 --build-number=4089
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.30 --build-number=4090
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 
