@@ -620,13 +620,24 @@ jobs:
 
       - name: Reusar bibliotecas nativas verificadas do canal oficial
         if: ${{ inputs.reuse_native_libraries }}
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
           set -euo pipefail
           curl --fail --location --proto '=https' --max-time 120 https://downloads.azsign.com.br/setup/remote/v28/AZSign-Remote-v28-armv7.apk -o "$RUNNER_TEMP/base-v28.apk"
           echo 'ccbc968b18ea144c4f13ea8bc88134ee2d34d508b360f9a9b01c4673cbc44117  '"$RUNNER_TEMP/base-v28.apk" | sha256sum -c -
           apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
-          "$apksigner" verify --print-certs "$RUNNER_TEMP/base-v28.apk" > "$RUNNER_TEMP/base-cert.txt"
-          grep -F 'Signer #1 certificate SHA-256 digest: becf9e8addbe567faaa67331f1ba0ca080c07e80f640f1ae404b58916cd547dc' "$RUNNER_TEMP/base-cert.txt"
+          "$apksigner" version
+          "$apksigner" verify --print-certs "$RUNNER_TEMP/base-v28.apk" | tee "$RUNNER_TEMP/base-cert.txt"
+          # Recent build-tools include the signer's name in their prefix.
+          # Match the certificate field and exact digest, independently of that prefix.
+          python3 - <<'PY_CERT'
+          import os, re
+          from pathlib import Path
+          text = (Path(os.environ['RUNNER_TEMP']) / 'base-cert.txt').read_text()
+          fingerprints = re.findall(r'certificate SHA-256 digest: ([a-f0-9]{64})', text)
+          assert fingerprints == ['becf9e8addbe567faaa67331f1ba0ca080c07e80f640f1ae404b58916cd547dc'], 'Unexpected base APK signer'
+          PY_CERT
           mkdir -p flutter/android/app/src/main/jniLibs/armeabi-v7a
           unzip -p "$RUNNER_TEMP/base-v28.apk" lib/armeabi-v7a/librustdesk.so > flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
           unzip -p "$RUNNER_TEMP/base-v28.apk" lib/armeabi-v7a/libc++_shared.so > flutter/android/app/src/main/jniLibs/armeabi-v7a/libc++_shared.so
