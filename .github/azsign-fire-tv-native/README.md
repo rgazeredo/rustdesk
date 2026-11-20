@@ -12,7 +12,16 @@ Observed on the user-authorized Amazon AFTHY7ABBA/Android 11 on 20 November 2026
 DIAL port 8009 exposed FireTVRemote in stopped state. POST activation returned
 201. Native port 8080 became reachable. TLS succeeded with the receiver
 certificate fixed in private local state. PIN display returned description OK.
-Waiting for the physical TV PIN; pairing, keys and reconnect remain unverified.
+PIN pairing succeeded. A fresh client process reused the saved credential and
+passed authenticated status without requesting a new PIN. Native Home, Back,
+left/right/down and Enter moved focus and opened the Settings screen; the screen
+was visually verified and MainSettingsActivity was observed. No input keyevent
+was sent through ADB. ADB was used to read/capture the screen and restore the
+player afterwards. Player normal BACK 3x exit was sent through the native protocol
+to avoid kiosk focus recovery masking the test. No TV preference changed.
+Full TV reboot, on-device loopback, mouse-to-node mapping and APK integration
+remain unverified. This is native network protocol validation, not a finished
+Remote v29/v30 feature.
 Do not confuse endpoint availability with functional input or boot persistence.
 
 Usage (state must be outside this repository):
