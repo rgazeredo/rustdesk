@@ -18,3 +18,14 @@ against Android SDK. Full APK and actual mouse/keyboard/reboot testing required.
 Version reserved: remote.30 / ARMv7 versionCode 5090. Do not publish or install
 unsigned APK, debug-signed APK, or APK signed with the player key. The Remote
 signer must match becf9e8addbe567faaa67331f1ba0ca080c07e80f640f1ae404b58916cd547dc.
+
+## Physical probe, 20 November 2026
+
+The shell-only probe (default read-only) was compiled against Android SDK and
+run in Settings with the player temporarily stopped to isolate kiosk behavior.
+Measured 39 nodes, 15 focusable, 0 clickable, 0 CLICK actions. Direct FOCUS on a
+settings card returned true, CLICK returned false, global DPAD_CENTER false.
+The earlier 16-node read was the AZSign canvas, not Settings. The native
+accessibility candidate therefore does NOT establish functional control and
+must not be described as a solution. Explore a separately authorized local
+ADB input path; do not publish this candidate as homologated Fire TV support.

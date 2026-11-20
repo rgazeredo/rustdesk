@@ -1,0 +1,24 @@
+name: AZSign Android signing certificate check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check public certificate only
+        env:
+          KEYSTORE_BASE64: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.AZSIGN_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.AZSIGN_ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          trap 'rm -f "$RUNNER_TEMP/signing.jks" "$RUNNER_TEMP/public-cert.der"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.jks"
+          keytool -exportcert -keystore "$RUNNER_TEMP/signing.jks" -storepass:env KEYSTORE_PASSWORD -alias "$KEY_ALIAS" -file "$RUNNER_TEMP/public-cert.der"
+          fingerprint=$(sha256sum "$RUNNER_TEMP/public-cert.der" | cut -d' ' -f1)
+          test "$fingerprint" = becf9e8addbe567faaa67331f1ba0ca080c07e80f640f1ae404b58916cd547dc
+          printf 'Remote certificate matches: %s\n' "$fingerprint"
