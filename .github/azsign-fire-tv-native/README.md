@@ -1,8 +1,8 @@
-# Native Fire TV protocol validation
+# Native Fire TV input for AZSign Remote
 
-Branch: investigate/fire-tv-native-pairing. Probe only, not integrated into the
-Remote APK or homologated product support. This uses no ADB and requests normal
-PIN authorization. Never guess PINs, retry pairing automatically, or bypass it.
+Branch: feat/fire-tv-native-remote. Remote v31 integration candidate, scoped to
+Amazon AFTHY7ABBA / API 30. Normal PIN authorization is required. Never guess
+PINs, retry pairing automatically, or bypass authorization.
 
 Protocol facts were independently implemented from:
 https://github.com/LibreControl/fire-tv/blob/main/docs/protocol.md
@@ -19,9 +19,9 @@ was visually verified and MainSettingsActivity was observed. No input keyevent
 was sent through ADB. ADB was used to read/capture the screen and restore the
 player afterwards. Player normal BACK 3x exit was sent through the native protocol
 to avoid kiosk focus recovery masking the test. No TV preference changed.
-Full TV reboot, on-device loopback, mouse-to-node mapping and APK integration
-remain unverified. This is native network protocol validation, not a finished
-Remote v29/v30 feature.
+On-device loopback activation and HTTPS reachability were verified independently.
+Full TV reboot, mouse-to-node mapping and the integrated signed APK still require
+physical validation. Remote v29/v30 do not contain this backend.
 Do not confuse endpoint availability with functional input or boot persistence.
 
 Usage (state must be outside this repository):
@@ -45,3 +45,31 @@ Unit checks: python3 -m unittest discover -s .github/azsign-fire-tv-native
 Four tests cover PIN rejection, private persistence/no token output, paired
 ordered down/up events and fail-closed certificate changes before HTTP output.
 Physical input must still be tested after the user supplies the PIN.
+
+## Android integration
+
+Apply `android/apply.py` after the recovery, D-pad and Fire TV accessibility
+patches. It fails before writing if baseline anchors diverge. Maintained Java
+sources are copied into the generated upstream build tree by CI.
+
+On the Remote home page choose **Configurar controle desta Fire TV**. Request a
+PIN, read the native dialog, dismiss it with the physical Back button and enter
+the four digits. Dismissing the dialog before verifying was tested successfully.
+The non-exported configuration Activity accepts no token or PIN through intents.
+The encrypted token is stored in private preferences using Android Keystore
+AES-GCM. Its certificate remains pinned; identity changes require explicitly
+forgetting and pairing again. No input server, ADB dependency, off-device helper
+or additional permission is introduced. Only DIAL HTTP on loopback is permitted;
+the authenticated native API uses HTTPS on loopback.
+
+Arrows/Enter go to the native backend. Mouse clicks focus a bounded, visible
+accessibility node then send native Select. Unavailable nodes, long presses and
+drags remain unsupported. Other hardware keeps its existing input path.
+
+`android/test_transport.py` runs a real JVM HTTPS fixture covering hardware
+gating, ordered presses, pinned TLS, redirects, response bounds and rejected
+headers/paths. It needs Java 17 and permission to bind local loopback.
+The workflow's optional `reuse_native_libraries` verifies both SHA-256 and signer
+of the published v28 APK and extracts only unchanged Rust/C++ libraries. Kotlin,
+Java and Flutter are rebuilt and signed in Actions; signing secrets never leave
+CI. This option requires unchanged Rust ABI. Version: remote.31 / ARMv7 code5091.

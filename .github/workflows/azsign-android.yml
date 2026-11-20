@@ -21,6 +21,10 @@ on:
         description: "Check only the public Remote signing certificate"
         type: boolean
         default: false
+      reuse_native_libraries:
+        description: "Reuse verified unchanged Rust/C++ libraries from the official v28 APK"
+        type: boolean
+        default: false
       recovery_origin:
         description: "Origem HTTPS confiável do CMS para recuperar instalações antigas sem active.json"
         required: false
@@ -470,6 +474,7 @@ jobs:
           sparse-checkout: |
             .github/azsign-root-input
             .github/azsign-fire-tv-input
+            .github/azsign-fire-tv-native
             .github/azsign-aquario-input
             .github/azsign-smartpro-input
             .github/azsign-password-confirmation
@@ -538,6 +543,17 @@ jobs:
       - name: Fire TV AFTHY7ABBA accessibility input
         run: python3 pilot-support/.github/azsign-fire-tv-input/apply.py .
 
+      - name: Integrar controle nativo Fire TV e pareamento local
+        run: python3 pilot-support/.github/azsign-fire-tv-native/android/apply.py .
+
+      - name: Validar transporte TLS nativo e política de hardware
+        env:
+          JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 pilot-support/.github/azsign-fire-tv-native/android/test_transport.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s pilot-support/.github/azsign-fire-tv-native -p 'test_*.py'
+
+
       - name: Flutter ${{ env.ANDROID_FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
         with:
@@ -578,6 +594,7 @@ jobs:
           add-to-path: true
 
       - name: vcpkg
+        if: ${{ !inputs.reuse_native_libraries }}
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: /opt/artifacts/vcpkg
@@ -585,9 +602,11 @@ jobs:
           doNotCache: false
 
       - name: Dependências nativas (libvpx, aom, opus, libyuv)
+        if: ${{ !inputs.reuse_native_libraries }}
         run: ./flutter/build_android_deps.sh "${{ env.ANDROID_ABI }}"
 
       - name: Compilar a lib Rust
+        if: ${{ !inputs.reuse_native_libraries }}
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
@@ -597,6 +616,19 @@ jobs:
           mkdir -p ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}
           cp ./target/${{ env.TARGET }}/release/liblibrustdesk.so \
              ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/librustdesk.so
+
+      - name: Reusar bibliotecas nativas verificadas do canal oficial
+        if: ${{ inputs.reuse_native_libraries }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --proto '=https' --max-time 120 https://downloads.azsign.com.br/setup/remote/v28/AZSign-Remote-v28-armv7.apk -o "$RUNNER_TEMP/base-v28.apk"
+          echo 'ccbc968b18ea144c4f13ea8bc88134ee2d34d508b360f9a9b01c4673cbc44117  '"$RUNNER_TEMP/base-v28.apk" | sha256sum -c -
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$RUNNER_TEMP/base-v28.apk" > "$RUNNER_TEMP/base-cert.txt"
+          grep -F 'Signer #1 certificate SHA-256 digest: becf9e8addbe567faaa67331f1ba0ca080c07e80f640f1ae404b58916cd547dc' "$RUNNER_TEMP/base-cert.txt"
+          mkdir -p flutter/android/app/src/main/jniLibs/armeabi-v7a
+          unzip -p "$RUNNER_TEMP/base-v28.apk" lib/armeabi-v7a/librustdesk.so > flutter/android/app/src/main/jniLibs/armeabi-v7a/librustdesk.so
+          unzip -p "$RUNNER_TEMP/base-v28.apk" lib/armeabi-v7a/libc++_shared.so > flutter/android/app/src/main/jniLibs/armeabi-v7a/libc++_shared.so
 
       - name: Compilar o APK
         env:
@@ -621,10 +653,12 @@ jobs:
           keyAlias=$KEY_ALIAS
           keyPassword=$KEY_PASSWORD
           EOF
-          cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
-             ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
+          if [ '${{ inputs.reuse_native_libraries }}' != 'true' ]; then
+            cp ${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so \
+               ./flutter/android/app/src/main/jniLibs/${{ env.ANDROID_ABI }}/
+          fi
           pushd flutter
-          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.30 --build-number=4090
+          flutter build apk --release --target-platform android-arm --split-per-abi --build-name=1.4.9-azsign-remote.31 --build-number=4091
           mv build/app/outputs/flutter-apk/app-${{ env.ANDROID_ABI }}-release.apk \
              ../rustdesk-azsign-${{ github.event.inputs.cliente }}-armv7.apk
 

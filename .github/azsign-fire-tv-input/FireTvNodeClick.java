@@ -48,6 +48,8 @@ public final class FireTvNodeClick {
             case 0:
             case 8: move(x, y); return true;
             case 10: end(x, y); return true;
+            case 523331: FireTvNativeRemote.get(service).press("dpad_down"); return true;
+            case 963: FireTvNativeRemote.get(service).press("dpad_up"); return true;
             default: return false;
         }
     }
@@ -90,6 +92,7 @@ public final class FireTvNodeClick {
     public synchronized void close() {
         down = false;
         main.removeCallbacksAndMessages(null);
+        FireTvNativeRemote.cancelInput(service);
     }
 
     private void click(int x, int y) {
@@ -113,8 +116,13 @@ public final class FireTvNodeClick {
             AccessibilityNodeInfo target = findTarget(root, x, y, 0, new int[] {512});
             if (target == null) { Log.i(TAG, "no accessible click target"); return; }
             try {
-                boolean result = target.performAction(AccessibilityNodeInfo.ACTION_CLICK);
-                Log.i(TAG, "ACTION_CLICK result=" + result);
+                boolean focused = target.isFocused() || target.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+                if (focused) {
+                    main.postDelayed(() -> FireTvNativeRemote.get(service).press("select"), 50);
+                    Log.i(TAG, "Native selection queued");
+                } else if (target.isClickable()) {
+                    Log.i(TAG, "Node click result=" + target.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+                } else Log.i(TAG, "Focus refused; no selection sent");
             } finally { target.recycle(); }
         } catch (RuntimeException e) {
             Log.w(TAG, "node click failed: " + e.getClass().getSimpleName());
@@ -142,6 +150,6 @@ public final class FireTvNodeClick {
                 break;
             } finally { child.recycle(); }
         }
-        return budget[0] >= 0 && (node.isClickable() || (node.getActions() & AccessibilityNodeInfo.ACTION_CLICK) != 0) ? AccessibilityNodeInfo.obtain(node) : null;
+        return budget[0] >= 0 && (node.isFocusable() || node.isClickable() || (node.getActions() & AccessibilityNodeInfo.ACTION_CLICK) != 0) ? AccessibilityNodeInfo.obtain(node) : null;
     }
 }
