@@ -171,12 +171,7 @@ public final class FireTvNativeRemote {
                 if (!ready) checkNow();
                 Session current = session;
                 if (current == null) return;
-                String path = "/v1/FireTV?action=" + action;
-                if ("home".equals(action) || "back".equals(action)) current.transport.request(path, null, current.token);
-                else {
-                    current.transport.request(path, "{\"keyActionType\":\"keyDown\"}", current.token);
-                    current.transport.request(path, "{\"keyActionType\":\"keyUp\"}", current.token);
-                }
+                current.transport.press(action, current.token);
                 Log.i("AZSignFireNative", "Native navigation completed");
             } catch (Exception error) { fail(error, true); }
         }, null);

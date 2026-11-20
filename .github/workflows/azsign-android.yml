@@ -550,6 +550,7 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 pilot-support/.github/azsign-fire-tv-native/android/test_apply.py
           PYTHONDONTWRITEBYTECODE=1 python3 pilot-support/.github/azsign-fire-tv-native/android/test_transport.py
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s pilot-support/.github/azsign-fire-tv-native -p 'test_*.py'
 

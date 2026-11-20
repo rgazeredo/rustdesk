@@ -25,6 +25,7 @@ public final class TransportTest {
    if (exchange.getRequestURI().getQuery() != null) events.add(new String(exchange.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
    if (mode.get()==1) { status=302; exchange.getResponseHeaders().add("Location", "https://example.invalid/"); }
    if (mode.get()==2) body="x".repeat(65537);
+   if (mode.get()==4 && events.get(events.size()-1).contains("keyDown")) status=500;
    if (mode.get()==3) { status=401; body="sensitive-response-body"; }
    byte[] bytes=body.getBytes(java.nio.charset.StandardCharsets.UTF_8); exchange.sendResponseHeaders(status, bytes.length);
    try (java.io.OutputStream out=exchange.getResponseBody()) { out.write(bytes); }
@@ -34,9 +35,13 @@ public final class TransportTest {
    int port = server.getAddress().getPort(); byte[] cert=FireTvTransport.discoverCertificate("127.0.0.1",port);
    FireTvTransport transport=new FireTvTransport("127.0.0.1",port,cert);
    require(transport.request("/v1/FireTV/status",null,"synthetic-token").contains("fixture"));
-   transport.request("/v1/FireTV?action=dpad_right","{\"keyActionType\":\"keyDown\"}","synthetic-token");
-   transport.request("/v1/FireTV?action=dpad_right","{\"keyActionType\":\"keyUp\"}","synthetic-token");
+   transport.press("dpad_right", "synthetic-token");
    require(events.size()==2 && events.get(0).contains("keyDown") && events.get(1).contains("keyUp"));
+   mode.set(4);
+   try { transport.press("select", "synthetic-token"); throw new AssertionError(); }
+   catch (FireTvTransport.HttpFailure expected) { require(expected.status==500); }
+   require(events.size()==4 && events.get(2).contains("keyDown") && events.get(3).contains("keyUp"));
+   mode.set(0);
    int before=requests.get(); byte[] changed=cert.clone(); changed[changed.length-1]^=1;
    try { new FireTvTransport("127.0.0.1",port,changed).request("/v1/FireTV/status",null,"never-send-this-token"); throw new AssertionError(); } catch (javax.net.ssl.SSLException expected) {}
    require(requests.get()==before);

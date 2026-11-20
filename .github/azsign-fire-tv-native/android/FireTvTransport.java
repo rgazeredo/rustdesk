@@ -128,6 +128,18 @@ public final class FireTvTransport {
         } finally { connection.disconnect(); }
     }
 
+    public void press(String action, String token) throws IOException, GeneralSecurityException {
+        if (action == null || !action.matches("dpad_up|dpad_down|dpad_left|dpad_right|select|home|back")) throw new IllegalArgumentException("Unsupported input");
+        String path = "/v1/FireTV?action=" + action;
+        if ("home".equals(action) || "back".equals(action)) request(path, null, token);
+        else {
+            // A timeout can occur after the receiver accepted keyDown. Always release;
+            // never retry keyDown, which could activate an item twice.
+            try { request(path, "{\"keyActionType\":\"keyDown\"}", token); }
+            finally { request(path, "{\"keyActionType\":\"keyUp\"}", token); }
+        }
+    }
+
     private boolean peerMatches(SSLSession session) {
         try { return MessageDigest.isEqual(certificate, session.getPeerCertificates()[0].getEncoded()); }
         catch (GeneralSecurityException | IOException error) { return false; }
