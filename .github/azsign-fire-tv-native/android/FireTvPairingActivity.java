@@ -42,22 +42,29 @@ public final class FireTvPairingActivity extends Activity {
         check = button(layout, "Verificar conexão");
         forget = button(layout, "Esquecer pareamento deste aplicativo");
         Button close = button(layout, "Voltar ao AZSign Remote"); close.setOnClickListener(v -> finish());
-        request.setOnClickListener(v -> { setBusy(true); remote.beginPairing(callback()); });
-        confirm.setOnClickListener(v -> { String value = pin.getText().toString(); pin.setText(""); setBusy(true); remote.finishPairing(value, callback()); });
+        request.setOnClickListener(v -> { setBusy(true); remote.beginPairing(callback(pin)); });
+        confirm.setOnClickListener(v -> { String value = pin.getText().toString(); pin.setText(""); setBusy(true); remote.finishPairing(value, callback(check)); });
         pin.setOnEditorActionListener((view, action, event) -> { if (action == EditorInfo.IME_ACTION_DONE && !busy) { confirm.performClick(); return true; } return false; });
-        check.setOnClickListener(v -> { setBusy(true); remote.check(callback()); });
+        check.setOnClickListener(v -> { setBusy(true); remote.check(callback(check)); });
         forget.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle("Esquecer o pareamento?")
             .setMessage("O AZSign Remote precisará de um novo PIN para controlar esta Fire TV. O controle físico não será removido.")
-            .setNegativeButton("Cancelar", null).setPositiveButton("Esquecer", (dialog, which) -> { setBusy(true); remote.forget(callback()); }).show());
+            .setNegativeButton("Cancelar", null).setPositiveButton("Esquecer", (dialog, which) -> { setBusy(true); remote.forget(callback(request)); }).show());
         request.requestFocus();
-        setBusy(true); remote.check(callback());
+        setBusy(true); remote.check(callback(request));
     }
     @Override public void onDestroy() {
         if (remote != null && !isChangingConfigurations()) remote.cancelPairing();
         super.onDestroy();
     }
-    private FireTvNativeRemote.Callback callback() {
-        return (success, message) -> runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) { setBusy(false); status.setText(message); } });
+    private FireTvNativeRemote.Callback callback(View nextFocus) {
+        return (success, message) -> runOnUiThread(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                setBusy(false); status.setText(message);
+                // Disabling a focused TV button moves focus to Close. Restore an
+                // intentional target when asynchronous work finishes.
+                (success ? nextFocus : request).requestFocus();
+            }
+        });
     }
     private void setBusy(boolean value) { busy = value; request.setEnabled(!value); confirm.setEnabled(!value); check.setEnabled(!value); forget.setEnabled(!value); pin.setEnabled(!value); }
 }

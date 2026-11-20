@@ -1,6 +1,6 @@
 # Native Fire TV input for AZSign Remote
 
-Branch: feat/fire-tv-native-remote. Remote v31 integration candidate, scoped to
+Branch: feat/fire-tv-native-remote. Remote v32 integration candidate, scoped to
 Amazon AFTHY7ABBA / API 30. Normal PIN authorization is required. Never guess
 PINs, retry pairing automatically, or bypass authorization.
 
@@ -72,4 +72,15 @@ headers/paths. It needs Java 17 and permission to bind local loopback.
 The workflow's optional `reuse_native_libraries` verifies both SHA-256 and signer
 of the published v28 APK and extracts only unchanged Rust/C++ libraries. Kotlin,
 Java and Flutter are rebuilt and signed in Actions; signing secrets never leave
-CI. This option requires unchanged Rust ABI. Version: remote.31 / ARMv7 code5091.
+CI. This option requires unchanged Rust ABI. Version: remote.32 / ARMv7 code5092.
+
+Remote v31 was built, signature-verified and installed preserving the existing
+UID/device ID. The integrated pairing UI opened and requested a PIN locally,
+but a later initialization failed with SocketException while the native service
+was not listening. v32 extends only bounded, read-only initialization retries
+from ConnectException to SocketException and logs fixed phase/reason codes. TLS
+identity errors still fail closed and input/PIN submission is never retried.
+The TV also replaced its factory receiver certificate with a newly issued
+Amazon subordinate certificate; a fresh PIN pairing confirmed that identity.
+That newer certificate and probe credential survived a DIAL service restart.
+Integrated pairing, actual Remote input and full reboot remain pending.

@@ -23,6 +23,7 @@ public final class FireTvNativeRemote {
     private byte[] pendingCertificate;
     private long pendingUntil;
     private boolean activated;
+    private String phase = "startup";
     private final java.util.concurrent.atomic.AtomicInteger inputEpoch = new java.util.concurrent.atomic.AtomicInteger();
     private static final class Session {
         final byte[] certificate; final String token; final FireTvTransport transport;
@@ -68,16 +69,17 @@ public final class FireTvNativeRemote {
         }
     }
     private void ensureService() throws Exception {
-        if (!activated) { FireTvTransport.activate(); activated = true; }
+        if (!activated) { phase = "activation"; FireTvTransport.activate(); activated = true; }
     }
     private void checkNow() throws Exception {
         if (session == null) throw new IllegalStateException("Pairing required");
         ensureService();
+        phase = "status";
         JSONObject status;
         long deadline = SystemClock.elapsedRealtime() + 4000;
         while (true) {
             try { status = new JSONObject(session.transport.request("/v1/FireTV/status", null, session.token)); break; }
-            catch (java.net.ConnectException error) {
+            catch (java.net.SocketException error) {
                 if (SystemClock.elapsedRealtime() >= deadline) throw error;
                 Thread.sleep(250);
             }
@@ -101,17 +103,19 @@ public final class FireTvNativeRemote {
             inputEpoch.incrementAndGet(); ready = false; pendingCertificate = null; pendingUntil = 0;
             try {
                 ensureService();
+                phase = "certificate";
                 byte[] certificate = store.certificate();
                 if (certificate == null) {
                     long deadline = SystemClock.elapsedRealtime() + 6000;
                     while (true) {
                         try { certificate = FireTvTransport.discoverCertificate(); break; }
-                        catch (java.net.ConnectException error) {
+                        catch (java.net.SocketException error) {
                             if (SystemClock.elapsedRealtime() >= deadline) throw error;
                             Thread.sleep(250);
                         }
                     }
                 }
+                phase = "pin-display";
                 FireTvTransport transport = new FireTvTransport(certificate);
                 JSONObject response = new JSONObject(transport.request("/v1/FireTV/pin/display", new JSONObject().put("friendlyName", "AZSign Remote").toString(), null));
                 if (!"OK".equals(response.optString("description"))) throw new IllegalStateException("PIN display refused");
@@ -128,16 +132,19 @@ public final class FireTvNativeRemote {
                 if (pendingCertificate == null || SystemClock.elapsedRealtime() > pendingUntil) throw new IllegalStateException("PIN request expired");
                 byte[] certificate = pendingCertificate.clone();
                 FireTvTransport transport = new FireTvTransport(certificate);
+                phase = "pin-verify";
                 JSONObject response = new JSONObject(transport.request("/v1/FireTV/pin/verify", new JSONObject().put("pin", pin).toString(), null));
                 String token = response.optString("description", "");
                 if (token.isEmpty() || token.length() > 4096 || !token.matches("[\\x20-\\x7e]+")) {
                     callback.done(false, "PIN não aceito. Confira o código ou solicite outro"); return;
                 }
                 Session next = new Session(certificate, token);
+                phase = "status";
                 JSONObject status = new JSONObject(next.transport.request("/v1/FireTV/status", null, token));
                 for (String field : new String[]{"osVersion", "platformType", "turnstileVersion"}) {
                     if (!(status.opt(field) instanceof String)) throw new IllegalStateException("Invalid native status");
                 }
+                phase = "credential-save";
                 store.save(certificate, token);
                 if (!token.equals(store.token()) || !java.security.MessageDigest.isEqual(certificate, store.certificate())) throw new java.security.GeneralSecurityException("Credential readback failed");
                 session = next; pendingCertificate = null; pendingUntil = 0;
@@ -171,6 +178,7 @@ public final class FireTvNativeRemote {
                 if (!ready) checkNow();
                 Session current = session;
                 if (current == null) return;
+                phase = "input";
                 current.transport.press(action, current.token);
                 Log.i("AZSignFireNative", "Native navigation completed");
             } catch (Exception error) { fail(error, true); }
@@ -191,6 +199,14 @@ public final class FireTvNativeRemote {
             message = "Não foi possível confirmar a identidade da Fire TV. Confira a data ou refaça o pareamento";
         } else if (error instanceof IllegalStateException) message = "Solicite o PIN e conclua o pareamento desta Fire TV";
         else { activated = false; message = "Não foi possível conectar ao controle da Fire TV. Tente novamente"; }
-        Log.w("AZSignFireNative", "Native input unavailable: " + error.getClass().getSimpleName());
+        // Log only a fixed classification, never exception text (which may contain data).
+        String reason = "other";
+        String detail = error.getMessage() == null ? "" : error.getMessage().toLowerCase(java.util.Locale.ROOT);
+        if (detail.contains("permission denied") || detail.contains("eacces") || detail.contains("eperm")) reason = "permission";
+        else if (detail.contains("reset")) reason = "reset";
+        else if (detail.contains("refused")) reason = "refused";
+        else if (detail.contains("closed")) reason = "closed";
+        else if (detail.contains("broken pipe")) reason = "pipe";
+        Log.w("AZSignFireNative", "Native input unavailable: phase=" + phase + " type=" + error.getClass().getSimpleName() + " reason=" + reason);
     }
 }
