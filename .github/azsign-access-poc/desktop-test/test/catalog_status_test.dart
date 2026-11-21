@@ -119,7 +119,7 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('org.rustdesk.rustdesk/host'),
         (call) async =>
-            call.method == 'azsignSecureRead' ? 'test-token' : null);
+            call.method == 'azsignSecureRead' ? '{"origin":"https://cms.example.test","value":"test-token"}' : null);
     final http = StatusHttp();
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
