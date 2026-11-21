@@ -7,6 +7,7 @@ import 'azsign_http_transports.dart';
 import 'azsign_native_storage.dart';
 import 'azsign_native_enrollment.dart';
 import 'azsign_types.dart';
+import 'azsign_catalog_widgets.dart';
 import 'azsign_deep_link.dart';
 import 'azsign_panel_storage.dart';
 
@@ -47,6 +48,15 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
   int _catalogGeneration = 0;
   final _search = TextEditingController();
   Timer? _searchTimer;
+  PlayerHeartbeatStatus? _playerStatus;
+  bool? _provisioned;
+  AzsignAddressBookFilter get _filter => AzsignAddressBookFilter(
+    search: _search.text.trim(), playerStatus: _playerStatus, provisioned: _provisioned);
+
+  void _filtersChanged() {
+    _searchTimer?.cancel();
+    _load(1);
+  }
 
   void _searchChanged(String value) {
     _searchTimer?.cancel();
@@ -195,16 +205,17 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
       final page = await _catalog.loadPage(
           token: session.token,
           page: number,
-          filter: AzsignAddressBookFilter(search: _search.text.trim()));
+          filter: _filter);
       if (mounted &&
           generation == _generation &&
           catalogGeneration == _catalogGeneration) setState(() => _page = page);
-    } catch (_) {
+    } catch (error) {
       if (mounted &&
           generation == _generation &&
           catalogGeneration == _catalogGeneration) {
-        setState(() => _error =
-            'Catálogo indisponível. Nenhum resultado antigo será usado.');
+        setState(() => _error = error is UnsupportedError
+            ? 'O filtro de provisionamento requer uma atualização do painel.'
+            : 'Catálogo indisponível. Nenhum resultado antigo será usado.');
       }
     } finally {
       if (mounted &&
@@ -221,6 +232,8 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
     azsignRequestedRemoteId.value = null;
     _searchTimer?.cancel();
     _search.clear();
+    _playerStatus = null;
+    _provisioned = null;
     _catalogGeneration++;
     _generation++;
     setState(() {
@@ -270,7 +283,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
         final page = await _catalog.loadPage(
             token: session.token,
             page: _page?.pagination.currentPage ?? 1,
-            filter: AzsignAddressBookFilter(search: _search.text.trim()));
+            filter: _filter);
         if (!mounted ||
             generation != _generation ||
             catalogGeneration != _catalogGeneration) return;
@@ -279,6 +292,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
             item.id == catalogDevice.id &&
             item.tenantId == catalogDevice.tenantId);
         if (current.length != 1 ||
+            !current.single.isProvisioned ||
             current.single.remoteId == null ||
             [
               RemoteTransportStatus.blocked,
@@ -314,7 +328,7 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
         padding: const EdgeInsets.all(24),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(widget.panelName ?? 'Dispositivos AZSign',
+          Text(widget.panelName ?? 'Players',
               style: Theme.of(context).textTheme.headlineSmall),
           Row(children: [
             Expanded(
@@ -355,62 +369,28 @@ class _AzsignDesktopPageState extends State<AzsignDesktopPage> {
           ] else ...[
             const SizedBox(height: 12),
             const Text(
-                'O certificado local é validado antes de cada conexão. O gateway confirma a autorização.'),
+                'Acompanhe os players da sua empresa e inicie o acesso remoto.'),
             const SizedBox(height: 12),
-            TextField(
-              controller: _search,
-              onChanged: _searchChanged,
-              onSubmitted: (_) {
-                _searchTimer?.cancel();
-                _load(1);
-              },
-              decoration: InputDecoration(
-                labelText: 'Buscar player pelo nome',
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                suffixIcon: _search.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Limpar busca',
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _search.clear();
-                          _searchChanged('');
-                        },
-                      ),
-              ),
-            ),
+            AzsignCatalogFilters(search: _search, playerStatus: _playerStatus,
+              provisioned: _provisioned, onSearch: _searchChanged, onSubmit: _filtersChanged,
+              onPlayerStatus: (value) { _playerStatus = value; _filtersChanged(); },
+              onProvisioned: (value) { _provisioned = value; _filtersChanged(); }),
             const SizedBox(height: 12),
             Expanded(
                 child: ListView(children: [
               for (final device in _page?.devices ?? <AddressBookDevice>[])
-                ListTile(
-                  leading: const Icon(Icons.tv),
-                  title: Text(device.name),
-                  subtitle: Text(
-                      'ID RustDesk: ${device.remoteId ?? "não provisionado"} · ${device.playerStatus.name}\nAcesso remoto: ${device.remoteAccessStatus.name}'),
-                  trailing: Tooltip(
-                      message:
-                          'Conectar pelo gateway autenticado com a identidade deste login.',
-                      child: OutlinedButton(
-                          onPressed: _busy ||
-                                  widget.onConnect == null ||
-                                  device.remoteId == null ||
-                                  [
-                                    RemoteTransportStatus.blocked,
-                                    RemoteTransportStatus.revoked,
-                                    RemoteTransportStatus.unprovisioned
-                                  ].contains(device.remoteAccessStatus)
-                              ? null
-                              : () => _connect(device),
-                          child: const Text('Conectar'))),
-                ),
+                AzsignPlayerCard(device: device,
+                  onConnect: _busy || widget.onConnect == null || device.remoteId == null ||
+                      [RemoteTransportStatus.blocked, RemoteTransportStatus.revoked,
+                       RemoteTransportStatus.unprovisioned].contains(device.remoteAccessStatus)
+                      ? null : () => _connect(device)),
               if (!_busy && _page?.devices.isEmpty == true)
                 Text(_search.text.trim().isEmpty
                     ? 'Nenhum dispositivo autorizado.'
                     : 'Nenhum player encontrado para esta busca.'),
             ])),
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            Wrap(alignment: WrapAlignment.end, crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              if (_page != null) Text('${_page!.pagination.total} players · Página ${_page!.pagination.currentPage} de ${_page!.pagination.lastPage}'),
               TextButton(
                   onPressed: _busy || (_page?.pagination.currentPage ?? 1) <= 1
                       ? null

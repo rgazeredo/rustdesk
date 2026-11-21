@@ -94,6 +94,9 @@ class AzsignHttpAddressBookTransport implements AzsignAddressBookTransport {
           ...?filter?.toQueryParameters()
         });
     response.requireSuccess();
+    if (filter?.provisioned != null && response.data['meta']?['supports_provisioning_filter'] != true) {
+      throw UnsupportedError('Atualize o painel para filtrar por provisionamento.');
+    }
     return AzsignAddressBookResponse.fromJson(response.data);
   }
 }

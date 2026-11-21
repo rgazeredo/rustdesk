@@ -93,6 +93,7 @@ class AzsignSession {
 }
 
 class AddressBookDevice {
+  final bool? provisioned;
   final String? remoteId;
   final String id;
   final String name;
@@ -104,6 +105,7 @@ class AddressBookDevice {
   final List<String> tags;
 
   const AddressBookDevice({
+    this.provisioned,
     this.remoteId,
     required this.id,
     required this.name,
@@ -120,6 +122,7 @@ class AddressBookDevice {
     final remoteStatusStr = json['remote_access_status'] as String? ?? 'unprovisioned';
 
     return AddressBookDevice(
+      provisioned: json['provisioned'] as bool?,
       remoteId: json['remote_id'] as String?,
       id: json['id'] as String,
       name: json['name'] as String,
@@ -135,6 +138,10 @@ class AddressBookDevice {
       tags: (json['tags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
     );
   }
+
+  // Older CMS versions expose only a remote ID and transport state.
+  bool get isProvisioned => provisioned ?? (remoteId?.isNotEmpty == true &&
+      ![RemoteTransportStatus.unprovisioned, RemoteTransportStatus.revoked].contains(remoteAccessStatus));
 
   static RemoteTransportStatus _parseRemoteStatus(String status) {
     switch (status) {
@@ -154,6 +161,7 @@ class AddressBookDevice {
   }
 
   Map<String, dynamic> toJson() => {
+    if (provisioned != null) 'provisioned': provisioned,
     'remote_id': remoteId,
     'id': id,
     'name': name,

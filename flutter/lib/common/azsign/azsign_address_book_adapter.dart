@@ -3,12 +3,14 @@ import 'azsign_types.dart';
 
 /// Filter parameters for the paginated Address Book query.
 class AzsignAddressBookFilter {
+  final bool? provisioned;
   final String? search;
   final String? tenantId;
   final PlayerHeartbeatStatus? playerStatus;
   final RemoteTransportStatus? remoteAccessStatus;
 
   const AzsignAddressBookFilter({
+    this.provisioned,
     this.search,
     this.tenantId,
     this.playerStatus,
@@ -29,6 +31,7 @@ class AzsignAddressBookFilter {
     if (remoteAccessStatus != null) {
       params['remote_access_status'] = remoteAccessStatus!.name;
     }
+    if (provisioned != null) params['provisioned'] = provisioned! ? '1' : '0';
     return params;
   }
 }
