@@ -33,6 +33,9 @@ class AzsignCatalogFilters extends StatelessWidget {
                   onChanged: onSearch,
                   onSubmitted: (_) => onSubmit(),
                   decoration: InputDecoration(
+                      isDense: false,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
                       labelText: 'Buscar player pelo nome',
                       prefixIcon: const Icon(Icons.search),
                       border: const OutlineInputBorder(),
@@ -56,6 +59,9 @@ class AzsignCatalogFilters extends StatelessWidget {
                           ? 'yes'
                           : 'no',
                   decoration: const InputDecoration(
+                      isDense: false,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       labelText: 'Provisionamento',
                       border: OutlineInputBorder()),
                   items: const [
@@ -74,6 +80,9 @@ class AzsignCatalogFilters extends StatelessWidget {
                   isExpanded: true,
                   value: playerStatus?.name ?? 'all',
                   decoration: const InputDecoration(
+                      isDense: false,
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       labelText: 'Conexão do player',
                       border: OutlineInputBorder()),
                   items: const [
