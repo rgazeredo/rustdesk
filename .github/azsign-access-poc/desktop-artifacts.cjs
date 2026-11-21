@@ -26,7 +26,14 @@ async function main() {
     const product = process.env.DESKTOP_PRODUCT
     assert(/^\d+\.\d+\.\d+$/.test(version), 'Stable version required')
     assert(['setup', 'remote'].includes(product), 'Unexpected product')
-    const release = await (await request(`${api}/releases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+    const tag = `${product}-${version}-build-${process.env.GITHUB_RUN_ID}`
+    const drafts = await (await request(`${api}/releases?per_page=100`)).json()
+    const prepared = drafts.find(item => item.tag_name === tag)
+    if (prepared) {
+      assert.equal(prepared.draft, true, 'Prepared build release must be private')
+      assert.equal(prepared.target_commitish, process.env.GITHUB_SHA, 'Prepared release source mismatch')
+    }
+    const release = prepared ?? await (await request(`${api}/releases`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
       tag_name: `${product}-${version}-build-${process.env.GITHUB_RUN_ID}`,
       target_commitish: process.env.GITHUB_SHA,
       name: `AZSign ${product === 'setup' ? 'Setup' : 'Remote'} ${version} — build ${process.env.GITHUB_RUN_ID}`,
@@ -44,7 +51,7 @@ async function main() {
     for (const directory of args) {
       assert(fs.statSync(directory).isDirectory())
       for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        if (entry.isFile() && /\.(exe|zip|sha256|txt)$/.test(entry.name)) await upload(release, path.join(directory, entry.name))
+        if (entry.isFile() && /\.(exe|zip|msix|sha256|json|txt)$/.test(entry.name)) await upload(release, path.join(directory, entry.name))
       }
     }
   } else throw new Error('Unknown artifact operation')
