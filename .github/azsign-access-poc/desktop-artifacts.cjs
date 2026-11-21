@@ -16,9 +16,21 @@ async function request(url, options = {}) {
 }
 async function upload(release, file) {
   assert.equal(release.draft, true, 'Refusing to modify a public release')
-  const url = release.upload_url.replace(/\{.*$/, '') + `?name=${encodeURIComponent(path.basename(file))}`
-  return (await request(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: fs.readFileSync(file) })).json()
+  const body = fs.readFileSync(file)
+  // Redirected stderr is often empty after a successful runtime probe.
+  if (!body.length) return null
+  const name = path.basename(file)
+  const existing = (release.assets || []).find(asset => asset.name === name)
+  if (existing) {
+    const digest = `sha256:${require('node:crypto').createHash('sha256').update(body).digest('hex')}`
+    assert.equal(existing.size, body.length, `Existing artifact size mismatch: ${name}`)
+    assert.equal(existing.digest, digest, `Existing artifact digest mismatch: ${name}`)
+    return existing
+  }
+  const url = release.upload_url.replace(/\{.*$/, '') + `?name=${encodeURIComponent(name)}`
+  return (await request(url, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body })).json()
 }
+
 async function main() {
   const [mode, ...args] = process.argv.slice(2)
   if (mode === 'upload-bundle') {
